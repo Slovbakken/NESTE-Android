@@ -1,4 +1,4 @@
-name: NESTE Android 1.1 — bygg APK
+name: NESTE Android – build and signed APK
 on:
   push:
     branches: [main]
@@ -9,37 +9,62 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      NESTE_KEYSTORE_BASE64: ${{ secrets.NESTE_KEYSTORE_BASE64 }}
+      NESTE_SIGNING_PASSWORD: ${{ secrets.NESTE_SIGNING_PASSWORD }}
     steps:
-      - name: Hent kildekode
+      - name: Checkout
         uses: actions/checkout@v4
-      - name: Installer Java 17
+      - name: Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - name: Installer Android platform og build-tools
+      - name: Android SDK 35
         shell: bash
         run: |
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | sort -V | tail -n 1)"
           test -n "$SDKMANAGER"
-          echo "Bruker $SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
-      - name: Installer Gradle
+      - name: Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Kompiler APK
+      - name: Compile check
         working-directory: android
         run: gradle --no-daemon --stacktrace assembleDebug
-      - name: Verifiser filen
+      - name: Missing persistent signing secrets
+        if: ${{ env.NESTE_KEYSTORE_BASE64 == '' || env.NESTE_SIGNING_PASSWORD == '' }}
+        shell: bash
         run: |
-          test -s android/app/build/outputs/apk/debug/app-debug.apk
-          sha256sum android/app/build/outputs/apk/debug/app-debug.apk
-      - name: Last opp installerbar APK
+          echo 'Source compiled. No installable update uploaded because persistent signing secrets are not configured.' >> "$GITHUB_STEP_SUMMARY"
+          echo "::warning::Set NESTE_KEYSTORE_BASE64 and NESTE_SIGNING_PASSWORD under Settings / Secrets and variables / Actions."
+      - name: Restore stable signing keystore
+        if: ${{ env.NESTE_KEYSTORE_BASE64 != '' && env.NESTE_SIGNING_PASSWORD != '' }}
+        shell: bash
+        run: |
+          umask 077
+          printf '%s' "$NESTE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/neste-release.jks"
+          test -s "$RUNNER_TEMP/neste-release.jks"
+          keytool -list -storetype PKCS12 -keystore "$RUNNER_TEMP/neste-release.jks" -storepass "$NESTE_SIGNING_PASSWORD" -alias neste >/dev/null
+      - name: Build signed release APK
+        if: ${{ env.NESTE_KEYSTORE_BASE64 != '' && env.NESTE_SIGNING_PASSWORD != '' }}
+        working-directory: android
+        env:
+          NESTE_SIGNING_STORE_FILE: ${{ runner.temp }}/neste-release.jks
+        run: gradle --no-daemon --stacktrace assembleRelease
+      - name: Verify APK signature
+        if: ${{ env.NESTE_KEYSTORE_BASE64 != '' && env.NESTE_SIGNING_PASSWORD != '' }}
+        shell: bash
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs android/app/build/outputs/apk/release/app-release.apk
+          sha256sum android/app/build/outputs/apk/release/app-release.apk
+      - name: Upload signed, upgradeable APK
+        if: ${{ env.NESTE_KEYSTORE_BASE64 != '' && env.NESTE_SIGNING_PASSWORD != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: NESTE-1.1-Android-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: NESTE-1.1.1-SIGNED-APK
+          path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 30
