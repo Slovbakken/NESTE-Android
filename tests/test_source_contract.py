@@ -31,7 +31,7 @@ class ContractTests(unittest.TestCase):
         self.assertIn('android:allowBackup="false"',manifest)
         gradle=(ROOT/'android/app/build.gradle').read_text()
         self.assertGreaterEqual(int(re.search(r"versionCode ([0-9]+)",gradle).group(1)), 4)
-        self.assertRegex(gradle, r"versionName '1[.]3[.]2'")
+        self.assertRegex(gradle, r"versionName '1[.]3[.]3'")
         self.assertIn('compose true',gradle)
     def test_onboarding_exits_and_keeps_data(self):
         ui=(SRC/'MainActivity.kt').read_text()
@@ -81,6 +81,15 @@ class ContractTests(unittest.TestCase):
                      'Hva får NESTE ikke se?', 'Fokusvern krever en separat'):
             self.assertIn(text,activity)
 
+    def test_restricted_android_usage_permission_guide(self):
+        activity=(SRC/'MainActivity.kt').read_text()
+        for text in ('Kontrolleres av begrenset innstilling',
+                     'Tillat begrensede innstillinger',
+                     'Åpne appinformasjon for NESTE',
+                     'Settings.ACTION_APPLICATION_DETAILS_SETTINGS',
+                     'Åpne brukstilgang',
+                     'Sjekk tilgangen på nytt'):
+            self.assertIn(text,activity)
     def test_state_compatibility(self):
         code=(SRC/'CoachStore.kt').read_text()
         for marker in ('AtomicFile','neste_state_native_v1.json','neste_legacy_v1_unmodified.json','importLegacy','importBackup','cards','tasks','logs','reminders','areas','plans','JSONArray','deleteAllData','dueCards','reviewCard','Europe/Oslo'):
