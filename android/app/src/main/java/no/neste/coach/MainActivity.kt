@@ -11,6 +11,10 @@ import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
 import android.os.Process
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.ZoneId
 import android.provider.Settings
 import android.webkit.WebView
@@ -87,7 +91,8 @@ private val Line=Color(0xFFDCE1D8)
 class MainActivity : ComponentActivity() {
     private lateinit var coach:CoachStore
     private var migrationLoading by mutableStateOf(true)
-    private var screenTimeMinutes by mutableIntStateOf(-1)
+    private val screenTimeRepository by lazy { ScreenTimeRepository(this) }
+    private var screenTimeSnapshot by mutableStateOf(ScreenTimeRepository.Snapshot(false,emptyList(),0L))
     private var migrationIssue by mutableStateOf<String?>(null)
     private val requestNotification = registerForActivityResult(ActivityResultContracts.RequestPermission()){ granted ->
         if(!granted) { /* Settings shows that notifications need system permission. */ }
@@ -138,7 +143,8 @@ class MainActivity : ComponentActivity() {
                     Text("Ingenting slettes automatisk. En ny start krever et aktivt valg.",fontSize=13.sp,color=Muted)
                 }
             } else NesteApp(coach,
-                screenTimeMinutes=screenTimeMinutes,
+                screenTimeSnapshot=screenTimeSnapshot,
+                onRefreshScreenTime={refreshScreenTime()},
                 onExport={exportLauncher.launch("neste-backup-${coach.today()}.json")},
                 onImport={importLauncher.launch(arrayOf("application/json","text/plain"))},
                 onPermission={askNotificationPermission()},
@@ -150,17 +156,15 @@ class MainActivity : ComponentActivity() {
         if(Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)requestNotification.launch(Manifest.permission.POST_NOTIFICATIONS)
         // Already granted: do not unexpectedly open Android settings.
     }
-    override fun onResume(){super.onResume();if(::coach.isInitialized)screenTimeMinutes=readScreenMinutes()}
-    private fun readScreenMinutes():Int{
-        try {
-            val ops=getSystemService(APP_OPS_SERVICE) as? AppOpsManager ?:return -1
-            if(ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS,Process.myUid(),packageName)!=AppOpsManager.MODE_ALLOWED)return -1
-            val manager=getSystemService(USAGE_STATS_SERVICE) as? UsageStatsManager ?:return -1
-            val today=LocalDate.now(ZoneId.systemDefault()).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-            val map=manager.queryAndAggregateUsageStats(today,System.currentTimeMillis())
-            val duration=map.filterKeys{it!=packageName&&!it.contains("launcher")&&it!="com.android.systemui"}.values.sumOf{it.totalTimeInForeground.coerceAtLeast(0L)}
-            return (duration/60000).coerceIn(0L,1440L).toInt()
-        }catch(_:Exception){return -1}
+    override fun onResume(){
+        super.onResume()
+        if(::coach.isInitialized) refreshScreenTime()
+    }
+    private fun refreshScreenTime() {
+        lifecycleScope.launch {
+            val snapshot=withContext(Dispatchers.IO) { screenTimeRepository.read() }
+            screenTimeSnapshot=snapshot
+        }
     }
     private fun migrateLegacyWebStorage(){
         val w=WebView(this)
@@ -208,17 +212,24 @@ class MainActivity : ComponentActivity() {
 private enum class Page { TODAY, PLAN, PROGRESS, ME }
 private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOTIFICATION, NEW_CARD, REVIEW_CARD, CHECKIN }
 
-@Composable private fun NesteApp(store:CoachStore,screenTimeMinutes:Int,onExport:()->Unit,onImport:()->Unit,onPermission:()->Unit,onScreenTime:()->Unit){
+@Composable private fun NesteApp(
+    store:CoachStore,
+    screenTimeSnapshot:ScreenTimeRepository.Snapshot,
+    onRefreshScreenTime:()->Unit,
+    onExport:()->Unit,onImport:()->Unit,onPermission:()->Unit,onScreenTime:()->Unit
+){
     var page by rememberSaveable { mutableStateOf(Page.TODAY) }
     var sheet by remember { mutableStateOf<Sheet?>(null) }
     var focus by rememberSaveable { mutableStateOf(false) }
     var smallerOverride by remember { mutableStateOf("") }
+    var screenTimeOpen by rememberSaveable { mutableStateOf(false) }
     // An explicit, observable navigation state: persistence alone must not decide
     // whether the onboarding screen disappears after pressing the final button.
     var onboardingFinished by remember { mutableStateOf(store.onboarded()) }
     val motion=!store.reducedMotion()
     LaunchedEffect(store.revision) { if(!store.onboarded()) onboardingFinished=false }
     BackHandler(enabled=focus){focus=false}
+    BackHandler(enabled=!focus && screenTimeOpen){screenTimeOpen=false}
     BackHandler(enabled=!focus && page!=Page.TODAY && sheet==null){page=Page.TODAY}
     if(!onboardingFinished){
         Onboarding(
@@ -232,12 +243,18 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
         FocusScreen(store,smallerOverride,onSmaller={sheet=Sheet.SMALLER},onDone={r->store.complete(r);focus=false;smallerOverride=""},onBack={focus=false})
     }
     val showNavigation: @Composable () -> Unit = {
-        Scaffold(containerColor=Paper,bottomBar={ BottomNav(page,onSelect={page=it},onCapture={sheet=Sheet.CAPTURE}) }) {insets->
+        if(screenTimeOpen){
+            ScreenTimeScreen(
+                snapshot=screenTimeSnapshot,store=store,
+                onBack={screenTimeOpen=false},onPermission=onScreenTime,
+                onRefresh=onRefreshScreenTime
+            )
+        }else Scaffold(containerColor=Paper,bottomBar={ BottomNav(page,onSelect={page=it},onCapture={sheet=Sheet.CAPTURE}) }) {insets->
             Box(Modifier.fillMaxSize().padding(insets)) {
                 if(motion) AnimatedContent(targetState=page,label="tabs",transitionSpec={
                     (fadeIn(tween(190))+slideInHorizontally(tween(190)){it/16}) togetherWith (fadeOut(tween(130))+slideOutHorizontally(tween(130)){-it/18})
-                }){p->PageBody(p,store,onSheet={sheet=it},onStart={store.start();focus=true},onExport,onImport,onPermission,onScreenTime,screenTimeMinutes)}
-                else PageBody(page,store,onSheet={sheet=it},onStart={store.start();focus=true},onExport,onImport,onPermission,onScreenTime,screenTimeMinutes)
+                }){p->PageBody(p,store,onSheet={sheet=it},onStart={store.start();focus=true},onExport,onImport,onPermission,screenTimeSnapshot,onScreenTimeOpen={screenTimeOpen=true})}
+                else PageBody(page,store,onSheet={sheet=it},onStart={store.start();focus=true},onExport,onImport,onPermission,screenTimeSnapshot,onScreenTimeOpen={screenTimeOpen=true})
             }
         }
     }
@@ -274,12 +291,16 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
     }
 }
 
-@Composable private fun PageBody(page:Page,store:CoachStore,onSheet:(Sheet)->Unit,onStart:()->Unit,onExport:()->Unit,onImport:()->Unit,onPermission:()->Unit,onScreenTime:()->Unit,screenTimeMinutes:Int){
+@Composable private fun PageBody(
+    page:Page,store:CoachStore,onSheet:(Sheet)->Unit,onStart:()->Unit,
+    onExport:()->Unit,onImport:()->Unit,onPermission:()->Unit,
+    screenTimeSnapshot:ScreenTimeRepository.Snapshot,onScreenTimeOpen:()->Unit
+){
     when(page){
-        Page.TODAY->TodayScreen(store,onSheet,onStart)
+        Page.TODAY->TodayScreen(store,onSheet,onStart,screenTimeSnapshot,onScreenTimeOpen)
         Page.PLAN->PlanScreen(store,onSheet)
-        Page.PROGRESS->ProgressScreen(store,onSheet)
-        Page.ME->MeScreen(store,onSheet,onExport,onImport,onPermission,onScreenTime,screenTimeMinutes)
+        Page.PROGRESS->ProgressScreen(store,onSheet,screenTimeSnapshot,onScreenTimeOpen)
+        Page.ME->MeScreen(store,onSheet,onExport,onImport,onPermission,screenTimeSnapshot,onScreenTimeOpen)
     }
 }
 
@@ -321,7 +342,10 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
     Surface(shape=RoundedCornerShape(14.dp),color=if(active)Forest else Sage,onClick=onClick){Text(label,Modifier.padding(horizontal=15.dp,vertical=11.dp),color=if(active)White else Forest,fontSize=13.sp,fontWeight=FontWeight.Medium)}
 }
 
-@Composable private fun TodayScreen(store:CoachStore,onSheet:(Sheet)->Unit,onStart:()->Unit){
+@Composable private fun TodayScreen(
+    store:CoachStore,onSheet:(Sheet)->Unit,onStart:()->Unit,
+    screenTime:ScreenTimeRepository.Snapshot,onOpenScreenTime:()->Unit
+){
     val a=store.currentAction(); val result=store.dayResult();val cap=store.capacity()
     val hour=LocalTime.now().hour
     val greeting=when{hour<11->"God morgen";hour<17->"God ettermiddag";else->"God kveld"}
@@ -338,6 +362,24 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
             Row(Modifier.padding(horizontal=14.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Default.BatteryChargingFull,null,tint=Forest,modifier=Modifier.size(18.dp));Spacer(Modifier.width(7.dp));Text("Kapasitet: "+when(cap){"low"->"Lite";"high"->"Mye";else->"Normal"},fontSize=13.sp,color=Forest,fontWeight=FontWeight.Medium);Spacer(Modifier.width(10.dp));Icon(Icons.Default.ExpandMore,null,tint=Forest,modifier=Modifier.size(17.dp))}
         }
         Spacer(Modifier.height(12.dp))
+        if(screenTime.hasAccess && screenTime.today?.source!="utilgjengelig"){
+            val todayMinutes=screenTime.today?.minutes?:0
+            val goal=store.screenTimeGoalMinutes()
+            Surface(shape=RoundedCornerShape(15.dp),color=White,onClick=onOpenScreenTime){
+                Row(Modifier.fillMaxWidth().padding(horizontal=15.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically){
+                    Icon(Icons.Default.PhoneAndroid,null,tint=Forest,modifier=Modifier.size(19.dp))
+                    Spacer(Modifier.width(9.dp))
+                    Text("Skjermtid i dag",color=Ink,fontSize=13.sp,modifier=Modifier.weight(1f))
+                    Text(formatUsageTime(todayMinutes),color=Forest,fontWeight=FontWeight.SemiBold,fontSize=14.sp)
+                    Spacer(Modifier.width(7.dp))
+                    Icon(Icons.Default.ChevronRight,null,tint=Muted,modifier=Modifier.size(18.dp))
+                }
+            }
+            if(goal>0 && store.priority("phone")>0 && todayMinutes>=goal){
+                Text("Du har passert din egen skjermtidsgrense. Vil du prøve ti minutter uten telefon?",
+                    color=Muted,fontSize=12.sp,lineHeight=18.sp,modifier=Modifier.padding(top=8.dp))
+            }
+        }
         SoftButton(if(store.todayLog().has("energy10"))"Oppdater dagens innsjekk" else "Dagens innsjekk · 30 sek",onClick={onSheet(Sheet.CHECKIN)})
         val hint=store.adaptiveHint()
         if(hint.isNotBlank()) Text(hint,color=Muted,fontSize=13.sp,lineHeight=18.sp)
@@ -473,7 +515,7 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
     }
 }
 
-@Composable private fun ProgressScreen(store:CoachStore,onSheet:(Sheet)->Unit){
+@Composable private fun ProgressScreen(store:CoachStore,onSheet:(Sheet)->Unit,screenTime:ScreenTimeRepository.Snapshot,onOpenScreenTime:()->Unit){
     val days=store.weekly();val done=days.count{it.second=="done"};val small=days.count{it.second=="small"};val skipped=days.count{it.second=="skip"}
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=24.dp).padding(top=30.dp,bottom=30.dp)){
         Intro("Det som faktisk virker","Utvikling")
@@ -505,6 +547,19 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
             StatTile("Forenklet",small.toString(),Modifier.weight(1f))
             StatTile("Stått over",skipped.toString(),Modifier.weight(1f))
         }
+        if(screenTime.hasAccess) {
+            Spacer(Modifier.height(18.dp))
+            Surface(color=White,shape=RoundedCornerShape(20.dp),onClick=onOpenScreenTime){
+                Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically){
+                    Column(Modifier.weight(1f)){
+                        MiniLabel("Skjermtid")
+                        Spacer(Modifier.height(6.dp))
+                        Text("Se dagene og appene du har brukt",color=Ink,fontSize=14.sp)
+                    }
+                    Icon(Icons.Default.ArrowForward,"Åpne skjermtid",tint=Forest)
+                }
+            }
+        }
         Spacer(Modifier.height(20.dp))
         val measured=(0L..6L).mapNotNull { off->
             val day=LocalDate.now(ZoneId.of("Europe/Oslo")).minusDays(off).toString()
@@ -533,7 +588,10 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
     }
 }
 
-@Composable private fun MeScreen(store:CoachStore,onSheet:(Sheet)->Unit,onExport:()->Unit,onImport:()->Unit,onPermission:()->Unit,onScreenTime:()->Unit,screenTimeMinutes:Int){
+@Composable private fun MeScreen(
+    store:CoachStore,onSheet:(Sheet)->Unit,onExport:()->Unit,onImport:()->Unit,
+    onPermission:()->Unit,screenTime:ScreenTimeRepository.Snapshot,onOpenScreenTime:()->Unit
+){
     var confirmDelete by remember {mutableStateOf(false)}
     if(confirmDelete) AlertDialog(onDismissRequest={confirmDelete=false},title={Text("Slette alle data?")},text={Text("Dette sletter oppgaver, historikk, læringskort og innstillinger på enheten. Eksporter først hvis du vil beholde dem.")},confirmButton={TextButton(onClick={store.deleteAllData();confirmDelete=false}){Text("Slett alt",color=Color(0xFFA04737))}},dismissButton={TextButton(onClick={confirmDelete=false}){Text("Avbryt")}})
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=24.dp).padding(top=30.dp,bottom=32.dp)){
@@ -554,11 +612,16 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
         Text("Alt lagres lokalt. Ingen konto, analyser eller nettverkstilgang.",fontSize=14.sp,color=Muted,lineHeight=21.sp)
         Spacer(Modifier.height(11.dp));SoftButton("Eksporter JSON-sikkerhetskopi",onExport)
         SoftButton("Importer sikkerhetskopi",onImport)
-        Text(if(screenTimeMinutes>=0)"Registrert skjermtid i dag: ${screenTimeMinutes} min (Android-estimat)." else "Skjermtid: tilgang ikke gitt",color=Muted,fontSize=12.sp)
-        SoftButton("Valgfri skjermtidstilgang",onScreenTime)
+        Spacer(Modifier.height(16.dp))
+        MiniLabel("Skjermtid fra Android")
+        SoftButton(
+            if(screenTime.hasAccess)"Se skjermtid, apper og syvdagersoversikt"
+            else "Koble til skjermtid (valgfritt)",
+            onOpenScreenTime
+        )
         SoftButton("Slett alle lokale data",onClick={confirmDelete=true})
         Spacer(Modifier.height(12.dp));Text("Lagrede læringskort: ${store.cardsCount()} · Historiske innsjekker beholdes i original skala.",fontSize=12.sp,color=Muted)
-        Spacer(Modifier.height(26.dp));Text("NESTE 1.1 · Offline personlig coach",fontSize=12.sp,color=Muted)
+        Spacer(Modifier.height(26.dp));Text("NESTE 1.2.1 · Offline personlig coach",fontSize=12.sp,color=Muted)
     }
 }
 @Composable private fun SettingRow(label:String,checked:Boolean,onChange:(Boolean)->Unit){
