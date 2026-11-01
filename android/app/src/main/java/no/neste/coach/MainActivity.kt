@@ -565,6 +565,7 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
     Row(Modifier.fillMaxWidth().heightIn(min=54.dp),verticalAlignment=Alignment.CenterVertically){Text(label,Modifier.weight(1f),fontSize=15.sp);Switch(checked=checked,onCheckedChange=onChange,colors=SwitchDefaults.colors(checkedTrackColor=Forest))}
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun CaptureSheet(store:CoachStore,onClose:()->Unit){
     var title by rememberSaveable{mutableStateOf("")}
     var area by rememberSaveable{mutableStateOf("memory")}

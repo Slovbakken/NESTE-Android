@@ -33,6 +33,9 @@ jobs:
           gradle-version: '8.9'
       - name: Python source regression tests
         run: python3 -m unittest discover -s tests -v
+      - name: Android coach behavioral unit tests
+        working-directory: android
+        run: gradle --no-daemon --stacktrace testDebugUnitTest
       - name: Compile check
         working-directory: android
         run: gradle --no-daemon --stacktrace assembleDebug
@@ -66,7 +69,7 @@ jobs:
         if: ${{ env.NESTE_KEYSTORE_BASE64 != '' && env.NESTE_SIGNING_PASSWORD != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: NESTE-1.1.2-SIGNED-APK
+          name: NESTE-1.2.0-SIGNED-APK
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 30

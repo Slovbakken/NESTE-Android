@@ -107,7 +107,7 @@ class CoachStore(private val context: Context) {
             File(context.filesDir,"neste_legacy_v1_unmodified.json").writeText(raw)
             write(parsed);data=parsed;revision++
             migrationMessage="Data fra 1.0 er videreført"
-            syncReminders()
+            runCatching{syncReminders()}
             true
         } catch(_:Exception) {migrationMessage="Kunne ikke migrere automatisk. Originaldata fra 1.0 er ikke slettet."; false}
     }
