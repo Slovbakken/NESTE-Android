@@ -254,8 +254,8 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
             Box(Modifier.fillMaxSize().padding(insets)) {
                 if(motion) AnimatedContent(targetState=page,label="tabs",transitionSpec={
                     (fadeIn(tween(190))+slideInHorizontally(tween(190)){it/16}) togetherWith (fadeOut(tween(130))+slideOutHorizontally(tween(130)){-it/18})
-                }){p->PageBody(p,store,onSheet={sheet=it},onStart={store.start();focus=true},onExport,onImport,onPermission,screenTimeSnapshot,onScreenTimeOpen={screenTimeOpen=true})}
-                else PageBody(page,store,onSheet={sheet=it},onStart={store.start();focus=true},onExport,onImport,onPermission,screenTimeSnapshot,onScreenTimeOpen={screenTimeOpen=true})
+                }){p->PageBody(p,store,onSheet={sheet=it},onStart={store.start();focus=true},onExport,onImport,onPermission,screenTimeSnapshot,onScreenTimeOpen={screenTimeOpen=true},onScreenTimePermission=onScreenTime,onRefreshScreenTime=onRefreshScreenTime)}
+                else PageBody(page,store,onSheet={sheet=it},onStart={store.start();focus=true},onExport,onImport,onPermission,screenTimeSnapshot,onScreenTimeOpen={screenTimeOpen=true},onScreenTimePermission=onScreenTime,onRefreshScreenTime=onRefreshScreenTime)
             }
         }
     }
@@ -295,12 +295,13 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
 @Composable private fun PageBody(
     page:Page,store:CoachStore,onSheet:(Sheet)->Unit,onStart:()->Unit,
     onExport:()->Unit,onImport:()->Unit,onPermission:()->Unit,
-    screenTimeSnapshot:ScreenTimeRepository.Snapshot,onScreenTimeOpen:()->Unit
+    screenTimeSnapshot:ScreenTimeRepository.Snapshot,onScreenTimeOpen:()->Unit,
+    onScreenTimePermission:()->Unit,onRefreshScreenTime:()->Unit
 ){
     when(page){
         Page.TODAY->TodayScreen(store,onSheet,onStart,screenTimeSnapshot,onScreenTimeOpen)
         Page.PLAN->PlanScreen(store,onSheet)
-        Page.PROGRESS->ProgressScreen(store,onSheet,screenTimeSnapshot,onScreenTimeOpen)
+        Page.PROGRESS->OverviewScreen(store,onSheet,screenTimeSnapshot,onScreenTimePermission,onRefreshScreenTime)
         Page.ME->MeScreen(store,onSheet,onExport,onImport,onPermission,screenTimeSnapshot,onScreenTimeOpen)
     }
 }
@@ -314,7 +315,7 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
                 Box(Modifier.size(48.dp).background(Forest,RoundedCornerShape(16.dp)),contentAlignment=Alignment.Center){Icon(Icons.Default.Add,"Fang opp",tint=White,modifier=Modifier.size(25.dp))}
                 Text("Fang opp",fontSize=10.sp,color=Forest,fontWeight=FontWeight.SemiBold)
             }
-            NavItem(Icons.Default.ShowChart,"Utvikling",selected==Page.PROGRESS){onSelect(Page.PROGRESS)}
+            NavItem(Icons.Default.BarChart,"Oversikt",selected==Page.PROGRESS){onSelect(Page.PROGRESS)}
             NavItem(Icons.Default.PersonOutline,"Meg",selected==Page.ME){onSelect(Page.ME)}
         }
     }
@@ -516,6 +517,43 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
     }
 }
 
+@Composable private fun OverviewScreen(
+    store:CoachStore,onSheet:(Sheet)->Unit,snapshot:ScreenTimeRepository.Snapshot,
+    onPermission:()->Unit,onRefresh:()->Unit
+){
+    var section by rememberSaveable { mutableStateOf("screen") }
+    val context=LocalContext.current
+    Column(Modifier.fillMaxSize().background(Paper)){
+        Column(Modifier.fillMaxWidth().padding(start=24.dp,end=24.dp,top=19.dp,bottom=13.dp)){
+            Text("Oversikt",style=MaterialTheme.typography.headlineMedium,color=Ink)
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                Surface(
+                    shape=RoundedCornerShape(13.dp),color=if(section=="screen")Forest else Sage,
+                    modifier=Modifier.weight(1f),onClick={section="screen"}
+                ){
+                    Text("Skjermtid",Modifier.padding(vertical=12.dp),textAlign=TextAlign.Center,
+                        fontSize=14.sp,fontWeight=FontWeight.SemiBold,
+                        color=if(section=="screen")White else Forest)
+                }
+                Surface(
+                    shape=RoundedCornerShape(13.dp),color=if(section=="progress")Forest else Sage,
+                    modifier=Modifier.weight(1f),onClick={section="progress"}
+                ){
+                    Text("Min utvikling",Modifier.padding(vertical=12.dp),textAlign=TextAlign.Center,
+                        fontSize=14.sp,fontWeight=FontWeight.SemiBold,
+                        color=if(section=="progress")White else Forest)
+                }
+            }
+        }
+        if(section=="screen") ScreenTimeScreen(
+            snapshot=snapshot,store=store,onBack={section="progress"},
+            onPermission=onPermission,onRefresh=onRefresh,embedded=true,
+            onFocusGuard={context.startActivity(Intent(context,FocusGuardActivity::class.java))}
+        ) else ProgressScreen(store,onSheet,snapshot,{section="screen"})
+    }
+}
+
 @Composable private fun ProgressScreen(store:CoachStore,onSheet:(Sheet)->Unit,screenTime:ScreenTimeRepository.Snapshot,onOpenScreenTime:()->Unit){
     val days=store.weekly();val done=days.count{it.second=="done"};val small=days.count{it.second=="small"};val skipped=days.count{it.second=="skip"}
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=24.dp).padding(top=30.dp,bottom=30.dp)){
@@ -638,10 +676,20 @@ private fun formatUsageTime(minutes:Int):String =
     store:CoachStore,
     onBack:()->Unit,
     onPermission:()->Unit,
-    onRefresh:()->Unit
+    onRefresh:()->Unit,
+    embedded:Boolean=false,
+    onFocusGuard:()->Unit={}
 ) {
-    Column(Modifier.fillMaxSize().background(Paper).statusBarsPadding().navigationBarsPadding()){
-        Row(Modifier.fillMaxWidth().padding(start=12.dp,end=24.dp,top=12.dp),
+    var appRange by rememberSaveable{mutableStateOf("week")}
+    var expandedApp by rememberSaveable{mutableStateOf<String?>(null)}
+    var showAllApps by rememberSaveable{mutableStateOf(false)}
+    val guard=remember(LocalContext.current){FocusGuardStore(LocalContext.current)}
+    Column(
+        Modifier.fillMaxSize().background(Paper).then(
+            if(embedded) Modifier else Modifier.statusBarsPadding().navigationBarsPadding()
+        )
+    ){
+        if(!embedded) Row(Modifier.fillMaxWidth().padding(start=12.dp,end=24.dp,top=12.dp),
             verticalAlignment=Alignment.CenterVertically){
             IconButton(onClick=onBack){
                 Icon(Icons.AutoMirrored.Filled.ArrowBack,"Tilbake",tint=Forest)
@@ -656,7 +704,14 @@ private fun formatUsageTime(minutes:Int):String =
             }
         }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-            .padding(horizontal=24.dp).padding(top=22.dp,bottom=30.dp)){
+            .padding(horizontal=24.dp).padding(top=if(embedded)8.dp else 22.dp,bottom=30.dp)){
+            if(embedded){
+                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+                    Text("Din telefonbruk",fontSize=16.sp,fontWeight=FontWeight.SemiBold,color=Ink,modifier=Modifier.weight(1f))
+                    IconButton(onClick=onRefresh){Icon(Icons.Default.Refresh,"Oppdater målingen",tint=Forest)}
+                }
+                Spacer(Modifier.height(10.dp))
+            }
             if(!snapshot.hasAccess){
                 Text("Få bedre oversikt, uten mer å følge med på.",
                     style=MaterialTheme.typography.headlineMedium,color=Ink)
@@ -689,7 +744,34 @@ private fun formatUsageTime(minutes:Int):String =
                 Text(if(today==null)"Android har ikke levert bruksdata for i dag."
                     else "Android-estimat for tid i apper siden midnatt.",
                     color=Muted,fontSize=13.sp)
-                Spacer(Modifier.height(27.dp))
+                Spacer(Modifier.height(17.dp))
+                Surface(shape=RoundedCornerShape(20.dp),color=Sage){
+                    Column(Modifier.fillMaxWidth().padding(17.dp)){
+                        val rules=guard.rules()
+                        val active=guard.enabled()
+                        Row(verticalAlignment=Alignment.CenterVertically){
+                            Icon(Icons.Default.Shield,null,tint=Forest,modifier=Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Fokusvern",fontWeight=FontWeight.SemiBold,color=Forest,modifier=Modifier.weight(1f))
+                            Text(if(active)"AKTIVT" else "IKKE AKTIVT",fontSize=10.sp,color=Muted)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text(if(active)
+                            "${rules.size} apper i kvoten · individuelle dagsgrenser"
+                            else "Velg hvilke apper som skal telle mot egne tidsgrenser.",
+                            fontSize=13.sp,lineHeight=19.sp,color=Ink)
+                        if(active) rules.take(5).forEach { rule ->
+                            val used=today?.apps?.firstOrNull {it.packageName==rule.pkg}
+                            val limit=guard.currentLimit(rule)
+                            Text((used?.displayName?:rule.pkg.substringAfterLast('.'))+
+                                ": ${used?.minutes?:0} / $limit min",color=Muted,fontSize=12.sp,
+                                modifier=Modifier.padding(top=5.dp))
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        SolidButton("Åpne Fokusvern og appkvoter",onFocusGuard,Modifier.fillMaxWidth())
+                    }
+                }
+                Spacer(Modifier.height(22.dp))
                 Surface(shape=RoundedCornerShape(22.dp),color=White){
                     Column(Modifier.fillMaxWidth().padding(19.dp)){
                         MiniLabel("SISTE SYV DAGER")
@@ -725,28 +807,91 @@ private fun formatUsageTime(minutes:Int):String =
                     }
                 }
                 Spacer(Modifier.height(27.dp))
-                MiniLabel("MEST BRUKTE APPER I DAG")
+                MiniLabel("BRUK PER APP")
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement=Arrangement.spacedBy(9.dp)){
+                    Chip("Siste 7 dager",appRange=="week"){appRange="week"}
+                    Chip("I dag",appRange=="today"){appRange="today"}
+                }
                 Spacer(Modifier.height(12.dp))
-                if(today?.apps.isNullOrEmpty()) {
-                    Text("Ingen appbruk registrert ennå.",color=Muted,fontSize=14.sp)
+                val validDays=snapshot.days.filter{it.source!="utilgjengelig"}
+                val weeklyApps=validDays.flatMap{it.apps}.groupBy{it.packageName}
+                    .map{(pkg,records)->
+                        ScreenTimeRepository.AppTime(pkg,records.first().displayName,
+                            records.sumOf{it.milliseconds})
+                    }.sortedByDescending{it.milliseconds}
+                val apps=if(appRange=="today") today?.apps.orEmpty() else weeklyApps
+                Text(if(appRange=="week")
+                    "Samlet tid per app · ${validDays.size} av 7 dager med tilgjengelige data"
+                    else "Registrert tid siden midnatt",
+                    color=Muted,fontSize=12.sp,lineHeight=18.sp)
+                Spacer(Modifier.height(10.dp))
+                if(apps.isEmpty()){
+                    Text("Ingen appbruk registrert i denne perioden.",color=Muted,fontSize=14.sp)
                 }else{
-                    val maxMs=(today?.apps?.firstOrNull()?.milliseconds?:1L).coerceAtLeast(1L)
-                    today!!.apps.take(8).forEach { app ->
-                        Column(Modifier.fillMaxWidth().padding(vertical=8.dp)){
+                    val maxMs=apps.first().milliseconds.coerceAtLeast(1L)
+                    (if(showAllApps)apps else apps.take(8)).forEach { app ->
+                        val quota=guard.rules().firstOrNull{it.pkg==app.packageName}
+                        Column(Modifier.fillMaxWidth().clickable {
+                            expandedApp=if(expandedApp==app.packageName)null else app.packageName
+                        }.padding(vertical=11.dp)){
                             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
-                                Text(app.displayName,modifier=Modifier.weight(1f),
-                                    color=Ink,fontSize=14.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
-                                Text(formatUsageTime(app.minutes),color=Muted,fontSize=12.sp)
+                                Column(Modifier.weight(1f)){
+                                    Text(app.displayName,color=Ink,fontSize=14.sp,fontWeight=FontWeight.Medium,
+                                        maxLines=1,overflow=TextOverflow.Ellipsis)
+                                    if(quota!=null && guard.enabled())
+                                        Text("I kvoten · ${guard.currentLimit(quota)} min/dag",
+                                            color=Muted,fontSize=11.sp)
+                                }
+                                Text(formatUsageTime(app.minutes),color=Forest,fontSize=13.sp,
+                                    fontWeight=FontWeight.Medium)
+                                Icon(if(expandedApp==app.packageName)Icons.Default.ExpandLess
+                                    else Icons.Default.ExpandMore,
+                                    "Vis appens historikk",tint=Muted,modifier=Modifier.size(20.dp))
                             }
-                            Spacer(Modifier.height(7.dp))
+                            Spacer(Modifier.height(8.dp))
                             LinearProgressIndicator(
-                                progress={ (app.milliseconds.toFloat()/maxMs).coerceIn(0f,1f) },
+                                progress={(app.milliseconds.toFloat()/maxMs).coerceIn(0f,1f)},
                                 modifier=Modifier.fillMaxWidth().height(5.dp)
                                     .clip(RoundedCornerShape(3.dp)),
                                 color=Forest,trackColor=Sage
                             )
+                            if(expandedApp==app.packageName){
+                                Spacer(Modifier.height(11.dp))
+                                Text("Bruk per dag",fontSize=12.sp,color=Muted)
+                                Spacer(Modifier.height(7.dp))
+                                val perDay=snapshot.days.map{day ->
+                                    day.apps.firstOrNull{it.packageName==app.packageName}?.minutes?:0
+                                }
+                                val maxMinutes=perDay.maxOrNull()?.coerceAtLeast(1)?:1
+                                Row(Modifier.fillMaxWidth().height(102.dp),
+                                    horizontalArrangement=Arrangement.spacedBy(7.dp),
+                                    verticalAlignment=Alignment.Bottom){
+                                    snapshot.days.forEachIndexed {i,day ->
+                                        val available=day.source!="utilgjengelig"
+                                        Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally){
+                                            Text(if(available)formatUsageTime(perDay[i]) else "—",
+                                                fontSize=10.sp,color=Muted,maxLines=1)
+                                            Spacer(Modifier.height(4.dp))
+                                            Box(Modifier.fillMaxWidth(.65f)
+                                                .height(if(available)
+                                                    ((perDay[i].toFloat()/maxMinutes)*64f).coerceAtLeast(4f).dp
+                                                    else 4.dp)
+                                                .background(if(available)Forest else Line,RoundedCornerShape(4.dp)))
+                                            Spacer(Modifier.height(4.dp))
+                                            Text(LocalDate.parse(day.day).format(
+                                                DateTimeFormatter.ofPattern("EE",Locale("nb","NO"))).take(2),
+                                                fontSize=10.sp,color=Muted)
+                                        }
+                                    }
+                                }
+                            }
                         }
+                        HorizontalDivider(color=Line)
                     }
+                    if(apps.size>8)
+                        SoftButton(if(showAllApps)"Vis færre apper" else "Vis alle ${apps.size} apper",
+                            onClick={showAllApps=!showAllApps},modifier=Modifier.fillMaxWidth())
                 }
                 Spacer(Modifier.height(26.dp))
                 MiniLabel("DITT EGET UTGANGSPUNKT")
