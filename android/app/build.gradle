@@ -4,7 +4,21 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.compose'
 }
 
+// Release signing is supplied by GitHub Actions secrets, never from the public repository.
+def nesteSigningPath = System.getenv('NESTE_SIGNING_STORE_FILE')
+def nesteSigningPassword = System.getenv('NESTE_SIGNING_PASSWORD')
+
 android {
+    signingConfigs {
+        nesteRelease {
+            if (nesteSigningPath && nesteSigningPassword) {
+                storeFile file(nesteSigningPath)
+                storePassword nesteSigningPassword
+                keyAlias 'neste'
+                keyPassword nesteSigningPassword
+            }
+        }
+    }
     namespace 'no.neste.coach'
     compileSdk 35
 
@@ -12,8 +26,8 @@ android {
         applicationId 'no.neste.coach'
         minSdk 26
         targetSdk 35
-        versionCode 2
-        versionName '1.1.0'
+        versionCode 3
+        versionName '1.1.1'
     }
 
     compileOptions {
@@ -24,6 +38,7 @@ android {
     buildFeatures { compose true }
     buildTypes {
         release {
+            if (nesteSigningPath && nesteSigningPassword) signingConfig signingConfigs.nesteRelease
             minifyEnabled false
         }
     }
