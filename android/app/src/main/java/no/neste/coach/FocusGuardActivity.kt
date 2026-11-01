@@ -81,9 +81,11 @@ class FocusGuardActivity:ComponentActivity() {
     val consent=settings.consent()
     val access=settings.serviceActive()
     val days=settings.observedDays()
+    val measuredDays=snapshot.days.dropLast(1).count{it.source!="utilgjengelig"}
     val rules=settings.rules()
     val running=settings.enabled()
     var selected by rememberSaveable{mutableStateOf(rules.map{it.pkg}.joinToString("|"))}
+    var planError by rememberSaveable{mutableStateOf(false)}
     val chosen=selected.split("|").filter{it.isNotBlank()}.toSet()
     // Draft selections are kept separate from persisted, enforced rules until approval.
     val activePackages=if(running)rules.map{it.pkg}.toSet() else emptySet()
@@ -279,11 +281,16 @@ class FocusGuardActivity:ComponentActivity() {
                     Text("Etter minst syv observasjonsdager kan du godkjenne startgrensen. Den tar utgangspunkt i faktisk bruk og kan reduseres med 10 % i uker som ser håndterbare ut. Nedtrappingen stopper midlertidig ved vansker.",
                         fontSize=13.sp,lineHeight=20.sp,color=Muted)
                     FocusButton(if(running)"Oppdater valgte apper" else "Godkjenn og start Fokusvern",
-                        enabled=days>=7 && chosen.isNotEmpty() && access){
-                        settings.approvePlan(chosen,snapshot);onChanged()
+                        enabled=days>=7 && measuredDays>=4 && chosen.isNotEmpty() && access){
+                        planError=!settings.approvePlan(chosen,snapshot)
+                        onChanged()
                     }
                     if(days<7)Text("Du kan teste sperren nå, men nedtrapping starter først etter observasjonsperioden.",
                         fontSize=12.sp,color=Muted)
+                    if(measuredDays<4)Text("Android-data mangler for flere dager. Vi trenger minst fire registrerte dager før kvotene kan aktiveres.",
+                        fontSize=12.sp,color=Muted,lineHeight=17.sp)
+                    if(planError)Text("Planen kunne ikke lagres. Ingen nye appgrenser ble aktivert.",
+                        fontSize=12.sp,color=MaterialTheme.colorScheme.error)
                     if(running && chosen==activePackages)
                         Text("Ingen endringer i aktive kvoter.",fontSize=12.sp,color=Muted)
                 }
