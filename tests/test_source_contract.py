@@ -31,7 +31,7 @@ class ContractTests(unittest.TestCase):
         self.assertIn('android:allowBackup="false"',manifest)
         gradle=(ROOT/'android/app/build.gradle').read_text()
         self.assertGreaterEqual(int(re.search(r"versionCode ([0-9]+)",gradle).group(1)), 4)
-        self.assertRegex(gradle, r"versionName '1[.]3[.]4'")
+        self.assertRegex(gradle, r"versionName '1[.]3[.]5'")
         self.assertIn('compose true',gradle)
     def test_onboarding_exits_and_keeps_data(self):
         ui=(SRC/'MainActivity.kt').read_text()
@@ -95,6 +95,16 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(ui.count('onFocusGuard={'),2)
         self.assertNotIn('onFocusGuard:()->Unit={}',ui)
         self.assertIn('activityContext.startActivity(',ui)
+
+    def test_focusvern_overlay_is_not_its_own_exit_event(self):
+        service=(SRC/'FocusGuardService.kt').read_text()
+        self.assertIn('FocusWindowPolicy.isOurOverlayEvent',service)
+        self.assertIn('if(pkg==packageName)',service)
+        self.assertIn('fun isKeyguardEvent(',service)
+        self.assertIn('if(FocusWindowPolicy.isOurOverlayEvent(pkg,packageName,cls))return',service)
+        test_file=(ROOT/'android/app/src/test/java/no/neste/coach/FocusWindowPolicyTest.kt').read_text()
+        self.assertIn('overlayWindowDoesNotCountAsLeavingInstagram',test_file)
+        self.assertIn('realNesteActivityCanAlwaysDismissGuard',test_file)
 
     def test_state_compatibility(self):
         code=(SRC/'CoachStore.kt').read_text()
