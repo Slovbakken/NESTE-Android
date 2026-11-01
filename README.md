@@ -30,6 +30,13 @@ Dette er en kildekodeleveranse for **NESTE 1.1**, utviklet med utgangspunkt i `N
 
 **VIKTIG:** Migreringen må QA-testes på telefon med en faktisk installert 1.0 og brukerdata. Det finnes ingen verifisert reell migrering fra dette miljøet. Ikke installer som oppdatering uten sikkerhetskopi av originale data.
 
+## Signert Android-oppdatering (1.1.1 og nyere)
+
+Produksjonsinstallasjoner skal bruke **signert release APK**, ikke den flyktig signerte debug-APK-en fra GitHub Actions.
+Byggejobben `.github/workflows/build-apk.yml` lager en verifisert `NESTE-1.1.1-SIGNED-APK` bare når GitHub repository secrets `NESTE_KEYSTORE_BASE64` og `NESTE_SIGNING_PASSWORD` finnes. De to verdiene må forbli hemmelige, og den samme signeringsnøkkelen må gjenbrukes for alle fremtidige utgaver. Se `OPPDATERINGER_OG_SIGNERING.md`.
+
+**Engangsovergang:** Den aller første 1.1.0 debug-APK-en hadde en ikke-bevart signeringsnøkkel. Den kan ikke overskrives med en APK signert med den nye permanente nøkkelen; ta vare på brukerdata før eventuell avinstallering. Etter installasjon av permanent signert 1.1.1 kan nyere signerte versjoner med samme `applicationId` og stigende `versionCode` installeres oppå eksisterende app.
+
 ## Bygg debug-APK
 
 Dette prosjektet krever Android SDK 35, JDK 17, Gradle 8.9, AGP 8.7.3 og Kotlin 2.0.21 med Compose.
