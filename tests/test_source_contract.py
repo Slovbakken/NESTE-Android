@@ -31,7 +31,7 @@ class ContractTests(unittest.TestCase):
         self.assertIn('android:allowBackup="false"',manifest)
         gradle=(ROOT/'android/app/build.gradle').read_text()
         self.assertGreaterEqual(int(re.search(r"versionCode ([0-9]+)",gradle).group(1)), 4)
-        self.assertRegex(gradle, r"versionName '1[.]3[.]0'")
+        self.assertRegex(gradle, r"versionName '1[.]3[.]1'")
         self.assertIn('compose true',gradle)
     def test_onboarding_exits_and_keeps_data(self):
         ui=(SRC/'MainActivity.kt').read_text()
@@ -60,6 +60,18 @@ class ContractTests(unittest.TestCase):
         self.assertIn('screenTimeGoalMinutes',store)
         self.assertIn('android.permission.PACKAGE_USAGE_STATS',manifest)
         self.assertNotIn('android.permission.INTERNET"',manifest)
+
+    def test_screen_time_overview_navigation_and_app_history(self):
+        activity=(SRC/'MainActivity.kt').read_text()
+        self.assertIn('OverviewScreen(store,onSheet,screenTimeSnapshot', activity)
+        self.assertIn('NavItem(Icons.Default.BarChart,"Oversikt"',activity)
+        self.assertIn('Text("Min utvikling"',activity)
+        self.assertIn('Text("Skjermtid"',activity)
+        self.assertIn('ScreenTimeRepository.AppTime(pkg,records.first().displayName',activity)
+        self.assertIn('BRUK PER APP',activity)
+        self.assertIn('Siste 7 dager',activity)
+        self.assertIn('Vis alle',activity)
+        self.assertIn('Åpne Fokusvern og appkvoter',activity)
 
     def test_state_compatibility(self):
         code=(SRC/'CoachStore.kt').read_text()
