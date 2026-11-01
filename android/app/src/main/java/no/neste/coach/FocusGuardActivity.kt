@@ -115,7 +115,7 @@ class FocusGuardActivity:ComponentActivity() {
                 FocusCard {
                     Text("1 · Tillat skjermtidsmåling",fontWeight=FontWeight.SemiBold,color=Ink)
                     Text("NESTE må kunne måle hvor lenge appene brukes. Det gis i Android-innstillinger.",fontSize=13.sp,color=Muted)
-                    FocusButton("Åpne brukstilgang",onUsageSettings)
+                    FocusButton("Åpne brukstilgang",onClick=onUsageSettings)
                 }
             }else if(!consent){
                 FocusCard {
@@ -217,7 +217,7 @@ class FocusGuardActivity:ComponentActivity() {
                         fontSize=13.sp,lineHeight=20.sp,color=Muted)
                     Text(if(access)"Tilgjengelighet: aktivert" else "Tilgjengelighet: ikke aktivert",
                         color=if(access)Green else Muted,fontWeight=FontWeight.Medium,fontSize=13.sp)
-                    FocusButton("Åpne tilgjengelighetstillatelser",onAccessibilitySettings)
+                    FocusButton("Åpne tilgjengelighetstillatelser",onClick=onAccessibilitySettings)
                 }
                 FocusCard {
                     Text("Hvordan strengt skal det være?",fontWeight=FontWeight.SemiBold,color=Ink)
