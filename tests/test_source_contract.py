@@ -76,7 +76,7 @@ class ContractTests(unittest.TestCase):
     def test_usage_access_explained_before_settings(self):
         activity=(SRC/'MainActivity.kt').read_text()
         for text in ('Koble til skjermtid','Brukstilgang er ikke aktivert',
-                     'SLIK GJØR DU','Åpne Android-innstillinger',
+                     'SLIK GJØR DU','Åpne brukstilgang',
                      'Sjekk tilgangen på nytt','Hva får NESTE se?',
                      'Hva får NESTE ikke se?', 'Fokusvern krever en separat'):
             self.assertIn(text,activity)
