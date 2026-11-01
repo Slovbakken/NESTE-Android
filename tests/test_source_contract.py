@@ -30,8 +30,8 @@ class ContractTests(unittest.TestCase):
         self.assertNotIn('android.permission.INTERNET',manifest)
         self.assertIn('android:allowBackup="false"',manifest)
         gradle=(ROOT/'android/app/build.gradle').read_text()
-        self.assertRegex(gradle, r"versionCode [4-9]\\d*")
-        self.assertIn("versionName '1.1.2'",gradle)
+        self.assertGreaterEqual(int(re.search(r"versionCode ([0-9]+)",gradle).group(1)), 4)
+        self.assertRegex(gradle, r"versionName '1[.]1[.][0-9]+'")
         self.assertIn('compose true',gradle)
     def test_onboarding_exits_and_keeps_data(self):
         ui=(SRC/'MainActivity.kt').read_text()

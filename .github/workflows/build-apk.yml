@@ -31,6 +31,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Python source regression tests
+        run: python3 -m unittest discover -s tests -v
       - name: Compile check
         working-directory: android
         run: gradle --no-daemon --stacktrace assembleDebug
