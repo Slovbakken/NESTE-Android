@@ -67,6 +67,8 @@ import kotlinx.coroutines.delay
 import org.json.JSONTokener
 import java.time.Instant
 import java.time.ZoneOffset
+import java.time.DayOfWeek
+import java.time.temporal.TemporalAdjusters
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -373,9 +375,20 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
 
 @Composable private fun FocusScreen(store:CoachStore,smallText:String,onSmaller:()->Unit,onDone:(String)->Unit,onBack:()->Unit){
     val a=store.currentAction();val haptic=LocalHapticFeedback.current
-    var seconds by rememberSaveable {mutableIntStateOf(300)}
+    var remainingMs by rememberSaveable {mutableLongStateOf(300_000L)}
+    var targetElapsed by rememberSaveable {mutableLongStateOf(0L)}
     var running by rememberSaveable {mutableStateOf(false)}
-    LaunchedEffect(running){while(running && seconds>0){delay(1000);seconds--};if(seconds<=0)running=false}
+    var seconds by remember {mutableIntStateOf(300)}
+    LaunchedEffect(running,targetElapsed) {
+        if(!running){seconds=((remainingMs+999)/1000).toInt()}
+        while(running){
+            val left=(targetElapsed-android.os.SystemClock.elapsedRealtime()).coerceIn(0L,300_000L)
+            remainingMs=left
+            seconds=((left+999)/1000).toInt()
+            if(left<=0L){running=false;break}
+            delay(250)
+        }
+    }
     Column(Modifier.fillMaxSize().background(Paper).statusBarsPadding().navigationBarsPadding().padding(24.dp)){
         Row(verticalAlignment=Alignment.CenterVertically){IconButton(onClick=onBack){Icon(Icons.AutoMirrored.Filled.ArrowBack,"Tilbake")};Spacer(Modifier.width(5.dp));MiniLabel("Ditt neste steg")}
         Spacer(Modifier.weight(.6f))
@@ -389,7 +402,16 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
             Surface(color=Sage,shape=RoundedCornerShape(19.dp)){
                 Row(Modifier.padding(15.dp),verticalAlignment=Alignment.CenterVertically){
                     Text("%02d:%02d".format(seconds/60,seconds%60),fontSize=21.sp,color=Forest,fontWeight=FontWeight.Medium)
-                    Spacer(Modifier.width(10.dp));IconButton(onClick={running=!running},modifier=Modifier.size(32.dp)){Icon(if(running)Icons.Default.Pause else Icons.Default.PlayArrow,if(running)"Pause" else "Start timer",tint=Forest)}
+                    Spacer(Modifier.width(10.dp));IconButton(onClick={
+                        if(running) {
+                            remainingMs=(targetElapsed-android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+                            running=false
+                        }else{
+                            if(remainingMs<=0L)remainingMs=300_000L
+                            targetElapsed=android.os.SystemClock.elapsedRealtime()+remainingMs
+                            running=true
+                        }
+                    },modifier=Modifier.size(32.dp)){Icon(if(running)Icons.Default.Pause else Icons.Default.PlayArrow,if(running)"Pause" else "Start timer",tint=Forest)}
                 }
             }
             Spacer(Modifier.width(10.dp));Text("Valgfri 5-minutters timer",color=Muted,fontSize=12.sp)
@@ -548,7 +570,21 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
     var area by rememberSaveable{mutableStateOf("memory")}
     var due by rememberSaveable{mutableStateOf("")}
     var owned by rememberSaveable{mutableStateOf(false)}
+    var showDatePicker by remember {mutableStateOf(false)}
+    val day=LocalDate.now(ZoneId.of("Europe/Oslo"))
+    val endOfWeek=day.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)).toString()
     val keyboard=LocalSoftwareKeyboardController.current
+    if(showDatePicker){
+        val picker=rememberDatePickerState()
+        DatePickerDialog(onDismissRequest={showDatePicker=false},
+            confirmButton={TextButton(onClick={
+                picker.selectedDateMillis?.let{ due=Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toString() }
+                showDatePicker=false
+            }){Text("Bruk dato",color=Forest)}},
+            dismissButton={TextButton(onClick={showDatePicker=false}){Text("Avbryt")}}){
+            DatePicker(state=picker)
+        }
+    }
     Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(15.dp)){
         Text("Fang opp",style=MaterialTheme.typography.headlineMedium)
         Text("Hva må du ta tak i?",color=Muted,fontSize=15.sp)
@@ -559,7 +595,13 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
         }
         MiniLabel("Når?")
         Row(horizontalArrangement=Arrangement.spacedBy(7.dp)){
-            Chip("Ingen dato",due==""){due=""};Chip("I morgen",due==LocalDate.now().plusDays(1).toString()){due=LocalDate.now().plusDays(1).toString()};Chip("Denne uken",due==LocalDate.now().plusDays(5).toString()){due=LocalDate.now().plusDays(5).toString()}
+            Chip("Ingen dato",due==""){due=""}
+            Chip("I dag",due==day.toString()){due=day.toString()}
+            Chip("I morgen",due==day.plusDays(1).toString()){due=day.plusDays(1).toString()}
+        }
+        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){
+            Chip("Innen søndag",due==endOfWeek){due=endOfWeek}
+            SoftButton(if(due.isEmpty())"Velg dato" else "Dato: $due",onClick={showDatePicker=true})
         }
         Row(verticalAlignment=Alignment.CenterVertically){Checkbox(owned,onCheckedChange={owned=it},colors=CheckboxDefaults.colors(checkedColor=Forest));Text("Dette tar jeg selv ansvar for",fontSize=14.sp)}
         SolidButton("Lagre i Plan",onClick={store.addTask(title,area,due,owned);keyboard?.hide();onClose()},modifier=Modifier.fillMaxWidth(),enabled=title.isNotBlank())
