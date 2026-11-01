@@ -43,7 +43,10 @@ class FocusGuardStore(private val context:Context) {
         prefs.edit().putString("rules",array.toString()).apply()
     }
     fun approvePlan(packages:Set<String>,snapshot:ScreenTimeRepository.Snapshot):Boolean {
-        if(!consent() || observedDays()<7 || !snapshot.hasAccess)return false
+        // Never calibrate a reduction plan from just an elapsed calendar interval.
+        // Require four actual days with accessible Android usage records.
+        val measuredDays=snapshot.days.dropLast(1).count{it.source!="utilgjengelig"}
+        if(!consent() || observedDays()<7 || !snapshot.hasAccess || measuredDays<4)return false
         val valid=packages.filter{canRestrict(it)}.take(8)
         if(valid.isEmpty())return false
         val now=System.currentTimeMillis()
