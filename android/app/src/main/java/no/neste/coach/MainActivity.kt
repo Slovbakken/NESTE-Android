@@ -224,6 +224,7 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
     var focus by rememberSaveable { mutableStateOf(false) }
     var smallerOverride by remember { mutableStateOf("") }
     var screenTimeOpen by rememberSaveable { mutableStateOf(false) }
+    val activityContext=LocalContext.current
     // An explicit, observable navigation state: persistence alone must not decide
     // whether the onboarding screen disappears after pressing the final button.
     var onboardingFinished by remember { mutableStateOf(store.onboarded()) }
@@ -248,7 +249,8 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
             ScreenTimeScreen(
                 snapshot=screenTimeSnapshot,store=store,
                 onBack={screenTimeOpen=false},onPermission=onScreenTime,
-                onRefresh=onRefreshScreenTime
+                onRefresh=onRefreshScreenTime,
+                onFocusGuard={ activityContext.startActivity(Intent(activityContext,FocusGuardActivity::class.java)) }
             )
         }else Scaffold(containerColor=Paper,bottomBar={ BottomNav(page,onSelect={page=it},onCapture={sheet=Sheet.CAPTURE}) }) {insets->
             Box(Modifier.fillMaxSize().padding(insets)) {
@@ -665,7 +667,7 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
         })
         SoftButton("Slett alle lokale data",onClick={confirmDelete=true})
         Spacer(Modifier.height(12.dp));Text("Lagrede læringskort: ${store.cardsCount()} · Historiske innsjekker beholdes i original skala.",fontSize=12.sp,color=Muted)
-        Spacer(Modifier.height(26.dp));Text("NESTE 1.3.3 · Offline personlig coach",fontSize=12.sp,color=Muted)
+        Spacer(Modifier.height(26.dp));Text("NESTE 1.3.4 · Offline personlig coach",fontSize=12.sp,color=Muted)
     }
 }
 private fun formatUsageTime(minutes:Int):String =
@@ -678,7 +680,7 @@ private fun formatUsageTime(minutes:Int):String =
     onPermission:()->Unit,
     onRefresh:()->Unit,
     embedded:Boolean=false,
-    onFocusGuard:()->Unit={}
+    onFocusGuard:()->Unit
 ) {
     var appRange by rememberSaveable{mutableStateOf("week")}
     var expandedApp by rememberSaveable{mutableStateOf<String?>(null)}
