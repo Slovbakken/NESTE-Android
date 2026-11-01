@@ -51,8 +51,25 @@ class FocusGuardService:AccessibilityService() {
     override fun onAccessibilityEvent(event:AccessibilityEvent?) {
         if(event==null || event.eventType!=AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)return
         val pkg=event.packageName?.toString()?:return
-        if(pkg==packageName || pkg=="com.android.systemui"){
-            foreground="";hideOverlay();return
+        // Opening an accessibility overlay itself generates WINDOW_STATE_CHANGED
+        // events with NESTE's package name. They are NOT app switches: removing
+        // the overlay here caused the visible flash/disappear defect.
+        val cls=event.className?.toString().orEmpty()
+        if(FocusWindowPolicy.isOurOverlayEvent(pkg,packageName,cls))return
+        // A real NESTE activity remains an intentional escape hatch.
+        if(pkg==packageName){
+            foreground=""
+            hideOverlay()
+            return
+        }
+        // System UI can emit transient events while the overlay is displayed.
+        // Ignore those rather than treating them as foreground app changes.
+        if(pkg=="com.android.systemui"){
+            if(FocusWindowPolicy.isKeyguardEvent(cls)){
+                foreground=""
+                hideOverlay()
+            }
+            return
         }
         if(pkg!=foreground){
             foreground=pkg
@@ -177,4 +194,16 @@ class FocusGuardService:AccessibilityService() {
         val old=overlay;overlay=null;overlayPkg=""
         if(old!=null)runCatching{(getSystemService(WINDOW_SERVICE) as WindowManager).removeViewImmediate(old)}
     }
+}
+
+
+/** Prevent self-generated accessibility window events from dismissing the guard. */
+internal object FocusWindowPolicy {
+    fun isOurOverlayEvent(eventPackage:String,ownPackage:String,eventClass:String):Boolean {
+        if(eventPackage!=ownPackage)return false
+        return !eventClass.contains("MainActivity") && !eventClass.contains("FocusGuardActivity")
+    }
+    fun isKeyguardEvent(eventClass:String):Boolean =
+        eventClass.contains("Keyguard",ignoreCase=true) ||
+        eventClass.contains("Lockscreen",ignoreCase=true)
 }
