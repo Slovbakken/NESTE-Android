@@ -30,7 +30,22 @@ class CoachStore(private val context: Context) {
         private set
     var migrationMessage: String? = null
         private set
+    private var nativeReadIssue = false
     private var data: JSONObject = readNative() ?: defaults()
+    fun hasDamagedNativeData(): Boolean = nativeReadIssue
+    fun recoverDamagedNativeData(): Boolean = try {
+        if (nativeReadIssue && file.baseFile.exists()) {
+            file.baseFile.copyTo(File(context.filesDir,"neste_corrupt_before_recovery.json"),overwrite=true)
+        }
+        write(defaults())
+        data=readNative() ?: defaults()
+        nativeReadIssue=false
+        revision++
+        true
+    } catch(e:Exception) {
+        android.util.Log.e("NESTE","Recovery failed",e)
+        false
+    }
 
     fun isNativeStored(): Boolean = file.baseFile.exists()
     fun onboarded() = data.optBoolean("onboarded", false)
@@ -48,9 +63,17 @@ class CoachStore(private val context: Context) {
     fun logs(): JSONObject = data.optJSONObject("logs") ?: JSONObject()
     fun snapshot(): String = data.toString(2)
     fun cardsCount(): Int = data.optJSONArray("cards")?.length() ?: 0
-    fun isMigrationPending(): Boolean = !isNativeStored()
+    fun isMigrationPending(): Boolean = !isNativeStored() && !nativeReadIssue
 
-    private fun readNative(): JSONObject? = try { JSONObject(file.openRead().bufferedReader().use { it.readText() }).also { validate(it) } } catch (_: Exception) { null }
+    private fun readNative(): JSONObject? = try {
+        JSONObject(file.openRead().bufferedReader().use { it.readText() }).also { validate(it) }
+    } catch(e:Exception) {
+        if(file.baseFile.exists()) {
+            nativeReadIssue=true
+            android.util.Log.e("NESTE","Unreadable native state",e)
+        }
+        null
+    }
     private fun validate(o: JSONObject) {
         require(o.optInt("schema", -1) == 1) { "Feil format" }
         require(o.optJSONObject("areas") != null && o.optJSONObject("plans") != null && o.optJSONObject("logs") != null) { "Manglende lagringsfelter" }
@@ -93,8 +116,11 @@ class CoachStore(private val context: Context) {
         val o=JSONObject(raw);validate(o)
         // A safety snapshot of current native data, if any.
         if(isNativeStored()) File(context.filesDir,"neste_backup_before_import.json").writeText(data.toString())
-        write(o);data=o;revision++;syncReminders();true
-    }catch(_:Exception){false}
+        if(nativeReadIssue && file.baseFile.exists()) file.baseFile.copyTo(File(context.filesDir,"neste_corrupt_before_import.json"),overwrite=true)
+        write(o);data=o;nativeReadIssue=false;revision++
+        runCatching { syncReminders() }
+        true
+    }catch(e:Exception){android.util.Log.e("NESTE","Import failed",e);false}
     /** Save onboarding first. Noncritical notification scheduling must never block navigation. */
     fun setOnboarded(areas: Set<String>): Boolean {
         return try {
@@ -132,6 +158,47 @@ class CoachStore(private val context: Context) {
     };syncAdvice()}
     private fun syncAdvice(){ val start=LocalDate.now(ZoneId.of("Europe/Oslo"));repeat(7){offset->val d=start.plusDays(offset.toLong()).toString();val a=resolveAction(planFor(d).optString("actionId"));ReminderReceiver.setDailyAdvice(context,d,a.title,a.description) } }
 
+    private fun lowCapacity(day:String):Boolean {
+        if(capacity()=="low")return true
+        val log=data.optJSONObject("logs")?.optJSONObject(day)
+        if(log!=null) {
+            if(log.has("energy10") && log.optInt("energy10")<=3)return true
+            if(log.has("sleep10") && log.optInt("sleep10")<=3)return true
+            if(log.has("stress10") && log.optInt("stress10")>=8)return true
+            if(!log.has("energy10") && log.has("energy") && log.optInt("energy")<=2)return true
+        }
+        val d=LocalDate.parse(day)
+        val difficult=(1L..7L).count {
+            data.optJSONObject("logs")?.optJSONObject(d.minusDays(it).toString())?.optString("reasonCode") in listOf("too_big","low_energy")
+        }
+        return difficult>=2
+    }
+    fun adaptiveHint():String {
+        val log=todayLog()
+        return when {
+            log.has("energy10") && log.optInt("energy10")<=3 -> "Lite energi registrert – vi foreslår et mindre steg."
+            log.has("stress10") && log.optInt("stress10")>=8 -> "Høyt stress registrert – vi holder ambisjonen lav."
+            lowCapacity(today()) -> "Tidligere tilbakemeldinger tilsier et mindre steg."
+            else -> ""
+        }
+    }
+    fun saveCheckin(energy:Int,stress:Int,sleep:Int,functioning:Int,burden:String,recovery:String) {
+        require(listOf(energy,stress,sleep,functioning).all{it in 0..10})
+        update { state ->
+            val log=state.getJSONObject("logs").optJSONObject(today())?:JSONObject()
+            log.put("energy10",energy).put("stress10",stress).put("sleep10",sleep).put("functioning10",functioning)
+                .put("checkinScale","0-10").put("burden",burden.trim().take(250)).put("recovery",recovery.trim().take(250))
+            state.getJSONObject("logs").put(today(),log)
+        }
+        replanIfNotStarted()
+    }
+    private fun replanIfNotStarted() {
+        if(dayResult().isNotEmpty() || isInProgress())return
+        val plan=data.optJSONObject("plans")?.optJSONObject(today())
+        if(plan?.optString("adjusted") in listOf("switch","smaller"))return
+        update { it.getJSONObject("plans").remove(today()) }
+        runCatching { syncAdvice() }
+    }
     private fun stableSeed(input:String):Long { var h=2166136261L; for(ch in input){h=(h xor ch.code.toLong())*16777619L and 0xFFFFFFFFL};return h }
     private fun scoreArea(area:String,date:String):Double {
         val priority=priority(area)
@@ -139,7 +206,7 @@ class CoachStore(private val context: Context) {
         val last=(recent.keys().asSequence().filter{it<date && recent.optJSONObject(it)?.optString("area")==area}.maxOrNull())
         val days=if(last==null) 7.0 else min(7,ChronoUnit.DAYS.between(LocalDate.parse(last),LocalDate.parse(date)).toInt()).toDouble()
         val weekday=LocalDate.parse(date).dayOfWeek.value
-        val low=capacity()=="low" || todayLog().optInt("energy",5) in 1..2 || todayLog().optInt("sleep",5) in 1..2
+        val low=lowCapacity(date)
         return priority*1.8+days*.9+(stableSeed(date+area)%100)/100.0 + (if(area=="work" && weekday in 1..5)1.5 else 0.0) + (if(area=="family" && weekday in 6..7)1.5 else 0.0) + (if(area=="recovery"&&low)4.0 else 0.0) - (if(area=="training"&&low)1.0 else 0.0) + (if(area=="family")0.35 else 0.0)
     }
     private fun planFor(day:String):JSONObject {
@@ -148,7 +215,7 @@ class CoachStore(private val context: Context) {
         val due=allTasks().filter{!it.optBoolean("done") && it.optString("due").isNotEmpty() && it.optString("due")<=day}.sortedBy{it.optString("due")}.firstOrNull()
         if(due!=null)return JSONObject().put("area",due.optString("area","family")).put("actionId","task:"+due.getString("id"))
         val area=areaNames.keys.filter{priority(it)>0}.maxByOrNull{scoreArea(it,day)}?:"recovery"
-        val low=capacity()=="low" || (todayLog().optInt("energy",5) in 1..2) || (todayLog().optInt("sleep",5) in 1..2)
+        val low=lowCapacity(day)
         val pool=actions.filter{it.area==area && (if(low)it.effort==1 else it.effort>=2)}.ifEmpty{actions.filter{it.area==area}}
         val last=data.optJSONObject("plans")?:JSONObject()
         val recent=last.keys().asSequence().filter{it<day}.sortedDescending().take(5).mapNotNull{last.optJSONObject(it)?.optString("actionId")}.toSet()
@@ -192,11 +259,37 @@ class CoachStore(private val context: Context) {
             }
         }
     }
-    fun setReflection(text:String){update{s->val log=s.getJSONObject("logs").optJSONObject(today())?:JSONObject();log.put("reflection",text.take(500));s.getJSONObject("logs").put(today(),log)}}
-    fun addTask(title:String,area:String,due:String,owned:Boolean) {if(title.isBlank())return
-        update{s->s.getJSONArray("tasks").put(JSONObject().put("id","t"+System.currentTimeMillis()).put("title",title.trim().take(130)).put("area",if(area in areaNames)area else "memory").put("due",due).put("done",false).put("owned",owned).put("createdAt",java.time.Instant.now().toString()))}
+    fun setReflection(reason:String,note:String) {
+        update { state ->
+            val log=state.getJSONObject("logs").optJSONObject(today())?:JSONObject()
+            log.put("reasonCode",reason.takeIf { it in listOf("easy","low_energy","too_big","wrong_time") }?:"")
+            log.put("reflection",note.trim().take(350))
+            state.getJSONObject("logs").put(today(),log)
+        }
+        replanIfNotStarted()
     }
-    fun completeTask(id:String){update{s->val arr=s.getJSONArray("tasks");for(i in 0 until arr.length()){val o=arr.optJSONObject(i)?:continue;if(o.optString("id")==id){o.put("done",!o.optBoolean("done"));break}}} }
+    fun addTask(title:String,area:String,due:String,owned:Boolean) {
+        if(title.isBlank())return
+        val verifiedDue=due.takeIf{it.isBlank() || runCatching{LocalDate.parse(it)}.isSuccess}?:""
+        update { state ->
+            state.getJSONArray("tasks").put(JSONObject().put("id","t"+java.util.UUID.randomUUID())
+                .put("title",title.trim().take(130)).put("area",if(area in areaNames)area else "memory")
+                .put("due",verifiedDue).put("done",false).put("owned",owned)
+                .put("createdAt",java.time.Instant.now().toString()))
+        }
+        replanIfNotStarted()
+    }
+    fun completeTask(id:String) {
+        if(allTasks().none{it.optString("id")==id})return
+        update { state ->
+            val arr=state.getJSONArray("tasks")
+            for(i in 0 until arr.length()){
+                val task=arr.optJSONObject(i)?:continue
+                if(task.optString("id")==id){task.put("done",!task.optBoolean("done"));break}
+            }
+        }
+        replanIfNotStarted()
+    }
     fun dueCards():List<JSONObject>{val a=data.optJSONArray("cards")?:JSONArray();return (0 until a.length()).mapNotNull{a.optJSONObject(it)}.filter{it.optString("due",today())<=today()} }
     fun addCard(question:String,answer:String){if(question.isBlank()||answer.isBlank())return
         update{s->s.getJSONArray("cards").put(JSONObject().put("id","c"+System.currentTimeMillis()).put("question",question.trim().take(200)).put("answer",answer.trim().take(900)).put("due",today()).put("level",0).put("createdAt",java.time.Instant.now().toString()))}
@@ -205,7 +298,7 @@ class CoachStore(private val context: Context) {
         val o=a.optJSONObject(i)?:continue
         if(o.optString("id")==id){val level=if(remembered)min(5,o.optInt("level",0)+1) else 0
             val intervals=listOf(1L,3,7,14,30,60)
-            o.put("level",level).put("due",LocalDate.parse(today()).plusDays(intervals[level]).toString()).put("lastReviewed",java.time.Instant.now().toString());break}
+            o.put("level",level).put("due",LocalDate.parse(today()).plusDays(intervals[if(remembered)level-1 else 0]).toString()).put("lastReviewed",java.time.Instant.now().toString());break}
     }}}
     fun deleteAllData(){
         // Delete private native data, including pristine migration/import copies.
