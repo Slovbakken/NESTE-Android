@@ -95,13 +95,25 @@ class CoachStore(private val context: Context) {
         if(isNativeStored()) File(context.filesDir,"neste_backup_before_import.json").writeText(data.toString())
         write(o);data=o;revision++;syncReminders();true
     }catch(_:Exception){false}
-    fun setOnboarded(areas: Set<String>) { update { s ->
-        val obj=s.getJSONObject("areas")
-        for(key in areaNames.keys)obj.put(key, if(key in areas)3 else 0)
-        if(areas.isEmpty())obj.put("recovery",3)
-        s.put("onboarded",true)
-        s.getJSONObject("plans").remove(today())
-    };ensurePlan();syncReminders() }
+    /** Save onboarding first. Noncritical notification scheduling must never block navigation. */
+    fun setOnboarded(areas: Set<String>): Boolean {
+        return try {
+            update { state ->
+                val obj=state.getJSONObject("areas")
+                for(key in areaNames.keys)obj.put(key, if(key in areas)3 else 0)
+                if(areas.isEmpty())obj.put("recovery",3)
+                state.put("onboarded",true)
+                state.getJSONObject("plans").remove(today())
+            }
+            // A failure in alarms/advice should not make the app appear stuck.
+            runCatching { ensurePlan() }.onFailure { android.util.Log.e("NESTE", "Could not prepare plan",it) }
+            runCatching { syncReminders() }.onFailure { android.util.Log.e("NESTE", "Could not schedule reminders",it) }
+            true
+        } catch(e:Exception) {
+            android.util.Log.e("NESTE", "Could not save onboarding",e)
+            false
+        }
+    }
     fun setCapacity(v:String){ if(v !in setOf("low","normal","high"))return
         update { s->s.getJSONObject("settings").put("capacity",v) ; if(dayResult().isEmpty())s.getJSONObject("plans").remove(today()) }; ensurePlan()
     }

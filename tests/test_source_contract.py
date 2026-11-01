@@ -30,9 +30,20 @@ class ContractTests(unittest.TestCase):
         self.assertNotIn('android.permission.INTERNET',manifest)
         self.assertIn('android:allowBackup="false"',manifest)
         gradle=(ROOT/'android/app/build.gradle').read_text()
-        self.assertIn("versionCode 2",gradle)
-        self.assertIn("versionName '1.1.0'",gradle)
+        self.assertRegex(gradle, r"versionCode [4-9]\\d*")
+        self.assertIn("versionName '1.1.2'",gradle)
         self.assertIn('compose true',gradle)
+    def test_onboarding_exits_and_keeps_data(self):
+        ui=(SRC/'MainActivity.kt').read_text()
+        storage=(SRC/'CoachStore.kt').read_text()
+        self.assertIn('onboardingFinished=true',ui)
+        self.assertIn('onFinished()',ui)
+        self.assertIn('if(store.setOnboarded(picked.toSet()))',ui)
+        self.assertIn('saveError=true',ui)
+        self.assertIn('.verticalScroll(rememberScrollState())',ui)
+        self.assertIn('onboarded",true',storage)
+        self.assertIn('fun setOnboarded(areas: Set<String>): Boolean',storage)
+
     def test_state_compatibility(self):
         code=(SRC/'CoachStore.kt').read_text()
         for marker in ('AtomicFile','neste_state_native_v1.json','neste_legacy_v1_unmodified.json','importLegacy','importBackup','cards','tasks','logs','reminders','areas','plans','JSONArray','deleteAllData','dueCards','reviewCard','Europe/Oslo'):

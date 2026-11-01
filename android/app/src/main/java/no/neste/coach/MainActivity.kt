@@ -183,11 +183,18 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
     var sheet by remember { mutableStateOf<Sheet?>(null) }
     var focus by rememberSaveable { mutableStateOf(false) }
     var smallerOverride by remember { mutableStateOf("") }
+    // An explicit, observable navigation state: persistence alone must not decide
+    // whether the onboarding screen disappears after pressing the final button.
+    var onboardingFinished by remember { mutableStateOf(store.onboarded()) }
     val motion=!store.reducedMotion()
     BackHandler(enabled=focus){focus=false}
     BackHandler(enabled=!focus && page!=Page.TODAY && sheet==null){page=Page.TODAY}
-    if(!store.onboarded()){
-        Onboarding(store) { if(Build.VERSION.SDK_INT>=33)onPermission() }
+    if(!onboardingFinished){
+        Onboarding(
+            store=store,
+            onNotifications={ if(Build.VERSION.SDK_INT>=33)onPermission() },
+            onFinished={ onboardingFinished=true }
+        )
         return
     }
     val showFocus: @Composable () -> Unit = {
@@ -563,15 +570,23 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
     }
 }
 
-@Composable private fun Onboarding(store:CoachStore,onNotifications:()->Unit){
+@Composable private fun Onboarding(store:CoachStore,onNotifications:()->Unit,onFinished:()->Unit){
     var step by rememberSaveable { mutableIntStateOf(0) }
     // Bundled string survives rotation/process recreation; the user can change all choices later.
     var selection by rememberSaveable { mutableStateOf("family,work,training") }
+    var saveError by remember { mutableStateOf(false) }
     val picked = selection.split(",").filter { it.isNotBlank() }
     val advance: () -> Unit = {
-        if(step<2) { step += 1 } else {
-            store.setOnboarded(picked.toSet())
-            if(store.reminders().optJSONObject("morning")?.optBoolean("on")==true) onNotifications()
+        if(step<2) { step += 1; saveError=false } else {
+            if(store.setOnboarded(picked.toSet())){
+                // Navigate explicitly after a successful, durable local write.
+                onFinished()
+                if(store.reminders().optJSONObject("morning")?.optBoolean("on")==true){
+                    runCatching { onNotifications() }
+                }
+            } else {
+                saveError=true
+            }
         }
         Unit
     }
@@ -586,6 +601,12 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
                         .navigationBarsPadding()
                         .padding(start=24.dp,end=24.dp,top=12.dp,bottom=12.dp)
                 ){
+                    if(saveError){
+                        Text("Kunne ikke lagre oppsettet. Prøv igjen. Ingen valg er slettet.",
+                            color=MaterialTheme.colorScheme.error,
+                            fontSize=13.sp,
+                            modifier=Modifier.padding(bottom=8.dp))
+                    }
                     SolidButton(
                         label=if(step==2)"Åpne NESTE" else "Fortsett",
                         onClick=advance,
