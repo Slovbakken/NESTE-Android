@@ -1,0 +1,234 @@
+[
+  {
+    "id": "f1",
+    "area": "family",
+    "title": "Spør hva som vil gjøre kvelden lettere",
+    "description": "Ta fem minutter og spør samboeren hva som ville vært en konkret avlastning i kveld. Følg opp én ting.",
+    "effort": 2,
+    "why": "Du trener på å ta initiativ framfor å vente på at noe blir bedt om."
+  },
+  {
+    "id": "f2",
+    "area": "family",
+    "title": "Gjør én usynlig oppgave synlig",
+    "description": "Se på morgendagens logistikk: klær, matpakke, beskjeder eller avtaler. Ordne én konkret ting.",
+    "effort": 2,
+    "why": "Små grep før behovet blir akutt gjør hverdagen lettere."
+  },
+  {
+    "id": "f3",
+    "area": "family",
+    "title": "Ti minutter helt til stede",
+    "description": "Legg telefonen et annet sted og la barnet styre lek eller samtale i ti minutter.",
+    "effort": 2,
+    "why": "Avgrenset, uforstyrret oppmerksomhet er mer realistisk enn å kreve full tilstedeværelse hele tiden."
+  },
+  {
+    "id": "f4",
+    "area": "family",
+    "title": "Ta eierskap til én ting",
+    "description": "Velg et konkret område hjemme som du følger opp fra start til slutt denne uken.",
+    "effort": 3,
+    "why": "Proaktivitet blir lettere når ansvar er tydelig definert."
+  },
+  {
+    "id": "f5",
+    "area": "family",
+    "title": "Legg merke til hva som trengs",
+    "description": "Gå gjennom ett rom og finn én ting som bør gjøres. Bruk to minutter på den.",
+    "effort": 1,
+    "why": "Å øve på å se behov er også fremgang, selv når handlingen er liten."
+  },
+  {
+    "id": "f6",
+    "area": "family",
+    "title": "Vær nærværende i fem minutter",
+    "description": "Legg bort telefonen og vær tilgjengelig for samboer eller barn i fem rolige minutter.",
+    "effort": 1,
+    "why": "Målet er en liten handling du faktisk kan gjøre også på en slitsom dag."
+  },
+  {
+    "id": "w1",
+    "area": "work",
+    "title": "Start på det du har utsatt",
+    "description": "Velg én ubehagelig arbeidsoppgave og jobb med den i 15 minutter før du finpusser planen.",
+    "effort": 3,
+    "why": "Det å begynne før du føler deg helt klar kan bryte utsettelsesmønsteret."
+  },
+  {
+    "id": "w2",
+    "area": "work",
+    "title": "Ta en beslutning med 70 % klarhet",
+    "description": "Velg en liten reverserbar beslutning. Sett en frist, skriv ned kriteriet og bestem deg.",
+    "effort": 3,
+    "why": "Ikke alle beslutninger trenger mer analyse; start med dem som kan justeres."
+  },
+  {
+    "id": "w3",
+    "area": "work",
+    "title": "Send den første avklaringen",
+    "description": "Finn én sak du venter med. Send spørsmålet som kan få den videre.",
+    "effort": 2,
+    "why": "En tydelig avklaring kan være mer verdt enn ytterligere grubling."
+  },
+  {
+    "id": "w4",
+    "area": "work",
+    "title": "Definer første synlige steg",
+    "description": "Skriv ned det aller første fysiske steget i et nytt eller uoversiktlig arbeidsprosjekt.",
+    "effort": 2,
+    "why": "En konkret handling er lettere å starte enn en abstrakt oppgave."
+  },
+  {
+    "id": "w5",
+    "area": "work",
+    "title": "Åpne én vanskelig sak",
+    "description": "Åpne dokumentet eller samtalen du vegrer deg for. Skriv en setning om neste handling.",
+    "effort": 1,
+    "why": "Du trenger ikke fullføre for å flytte terskelen for å komme i gang."
+  },
+  {
+    "id": "w6",
+    "area": "work",
+    "title": "To minutter før e-posten",
+    "description": "Bruk to minutter på én prioritert oppgave før du går inn i innboksen.",
+    "effort": 1,
+    "why": "Et lite initiativ tidlig kan gjøre dagen mindre reaktiv."
+  },
+  {
+    "id": "t1",
+    "area": "training",
+    "title": "En kort økt som faktisk blir gjort",
+    "description": "Sett av 15 minutter til styrke eller mobilitet hjemme. Juster belastning til dagsform.",
+    "effort": 3,
+    "why": "Kontinuitet er viktigere enn en perfekt økt."
+  },
+  {
+    "id": "t2",
+    "area": "training",
+    "title": "Planlegg neste treningsvindu",
+    "description": "Velg et realistisk tidspunkt for en kort treningsøkt og noter det i planen.",
+    "effort": 2,
+    "why": "Å knytte aktiviteten til et bestemt tidspunkt kan gjøre start enklere."
+  },
+  {
+    "id": "t3",
+    "area": "training",
+    "title": "Gjør en rolig bevegelsesøkt",
+    "description": "Bruk ti minutter på kontrollert og komfortabel bevegelighet for hofte og bakside lår.",
+    "effort": 2,
+    "why": "Rolig, jevn praksis passer bedre enn å presse svært stive ledd hardt."
+  },
+  {
+    "id": "t4",
+    "area": "training",
+    "title": "Fem minutter på gulvet",
+    "description": "Gjør fem minutter rolig bevegelse, innenfor det som kjennes greit.",
+    "effort": 1,
+    "why": "Dette teller som å holde vanen i live."
+  },
+  {
+    "id": "t5",
+    "area": "training",
+    "title": "En kort tur ute",
+    "description": "Gå en rolig tur i fem til ti minutter, uten tempo- eller distansekrav.",
+    "effort": 1,
+    "why": "Lavterskel aktivitet kan være lettere å gjennomføre på dager med lite søvn."
+  },
+  {
+    "id": "l1",
+    "area": "learn",
+    "title": "Lær én ting og gjenfortell den",
+    "description": "Bruk ti minutter på en sak du er nysgjerrig på. Lukk kilden og forklar ett poeng med egne ord.",
+    "effort": 2,
+    "why": "Aktiv gjenhenting er ofte mer nyttig for hukommelsen enn passiv lesing."
+  },
+  {
+    "id": "l2",
+    "area": "learn",
+    "title": "Still et bedre spørsmål",
+    "description": "Velg en ting du ikke forstår i jobb eller hverdag. Finn et godt spørsmål og undersøk svaret.",
+    "effort": 2,
+    "why": "Nysgjerrighet trenger ikke et stort læringsprosjekt."
+  },
+  {
+    "id": "l3",
+    "area": "learn",
+    "title": "Tre minutter med ny kunnskap",
+    "description": "Les eller lytt i tre minutter. Skriv ned én ting du vil huske.",
+    "effort": 1,
+    "why": "Små læringsøkter er en god start når energien er begrenset."
+  },
+  {
+    "id": "m1",
+    "area": "memory",
+    "title": "Få én løs tråd ut av hodet",
+    "description": "Noter én avtale, oppgave eller bekymring på et sted du faktisk ser igjen.",
+    "effort": 1,
+    "why": "Et eksternt system kan avlaste hukommelsen uten at du må huske mer."
+  },
+  {
+    "id": "m2",
+    "area": "memory",
+    "title": "Hent fram noe du lærte",
+    "description": "Tenk tilbake på noe du lærte nylig. Prøv å forklare det uten å slå det opp.",
+    "effort": 2,
+    "why": "Gjenhenting styrker tilgjengeligheten til det du har lært."
+  },
+  {
+    "id": "m3",
+    "area": "memory",
+    "title": "Lag en huskeregel for i morgen",
+    "description": "Skriv ned hva som må skje i morgen, og knytt det til et tidspunkt eller en kjent rutine.",
+    "effort": 2,
+    "why": "En konkret trigger fungerer ofte bedre enn et løst ønske om å huske."
+  },
+  {
+    "id": "p1",
+    "area": "phone",
+    "title": "Legg bort telefonen når du kommer hjem",
+    "description": "Ha en telefonfri halvtime i starten av tiden hjemme. Legg enheten utenfor rekkevidde.",
+    "effort": 2,
+    "why": "Det er lettere å endre omgivelsene enn å stole på selvkontroll hver gang."
+  },
+  {
+    "id": "p2",
+    "area": "phone",
+    "title": "Finn ett automatisk scroll-øyeblikk",
+    "description": "Legg merke til neste gang du åpner en app uten et tydelig formål. Lukk den og velg bevisst.",
+    "effort": 2,
+    "why": "Å oppdage utløsere kan være første skritt mot endring."
+  },
+  {
+    "id": "p3",
+    "area": "phone",
+    "title": "Ti minutter uten skjerm",
+    "description": "Velg ett ti-minuttersrom i dag der telefonen ligger i et annet rom.",
+    "effort": 1,
+    "why": "Et kort skjermfritt intervall er bedre enn en streng regel du ikke orker å følge."
+  },
+  {
+    "id": "r1",
+    "area": "recovery",
+    "title": "Senk lista for én ting",
+    "description": "Velg én oppgave du kan gjøre enklere, utsette bevisst eller overlate til et senere tidspunkt.",
+    "effort": 1,
+    "why": "Restitusjon handler også om å redusere belastning, ikke bare legge til tiltak."
+  },
+  {
+    "id": "r2",
+    "area": "recovery",
+    "title": "Beskytt en rolig overgang",
+    "description": "Sett av ti minutter uten nye krav etter arbeid eller før leggetid.",
+    "effort": 1,
+    "why": "En liten overgang kan bidra til å redusere følelsen av å alltid være på."
+  },
+  {
+    "id": "r3",
+    "area": "recovery",
+    "title": "Legg deg litt tidligere hvis det er mulig",
+    "description": "Velg én kveldsaktivitet du kan kutte ned for å gi søvnen bedre plass.",
+    "effort": 2,
+    "why": "Når søvnen er oppstykket, kan belastningsstyring være viktigere enn mer selvdisiplin."
+  }
+]
