@@ -665,7 +665,7 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
         })
         SoftButton("Slett alle lokale data",onClick={confirmDelete=true})
         Spacer(Modifier.height(12.dp));Text("Lagrede læringskort: ${store.cardsCount()} · Historiske innsjekker beholdes i original skala.",fontSize=12.sp,color=Muted)
-        Spacer(Modifier.height(26.dp));Text("NESTE 1.3.1 · Offline personlig coach",fontSize=12.sp,color=Muted)
+        Spacer(Modifier.height(26.dp));Text("NESTE 1.3.2 · Offline personlig coach",fontSize=12.sp,color=Muted)
     }
 }
 private fun formatUsageTime(minutes:Int):String =

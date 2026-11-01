@@ -31,7 +31,7 @@ class ContractTests(unittest.TestCase):
         self.assertIn('android:allowBackup="false"',manifest)
         gradle=(ROOT/'android/app/build.gradle').read_text()
         self.assertGreaterEqual(int(re.search(r"versionCode ([0-9]+)",gradle).group(1)), 4)
-        self.assertRegex(gradle, r"versionName '1[.]3[.]1'")
+        self.assertRegex(gradle, r"versionName '1[.]3[.]2'")
         self.assertIn('compose true',gradle)
     def test_onboarding_exits_and_keeps_data(self):
         ui=(SRC/'MainActivity.kt').read_text()
@@ -72,6 +72,14 @@ class ContractTests(unittest.TestCase):
         self.assertIn('Siste 7 dager',activity)
         self.assertIn('Vis alle',activity)
         self.assertIn('Åpne Fokusvern og appkvoter',activity)
+
+    def test_usage_access_explained_before_settings(self):
+        activity=(SRC/'MainActivity.kt').read_text()
+        for text in ('Koble til skjermtid','Brukstilgang er ikke aktivert',
+                     'SLIK GJØR DU','Åpne Android-innstillinger',
+                     'Sjekk tilgangen på nytt','Hva får NESTE se?',
+                     'Hva får NESTE ikke se?', 'Fokusvern krever en separat'):
+            self.assertIn(text,activity)
 
     def test_state_compatibility(self):
         code=(SRC/'CoachStore.kt').read_text()
