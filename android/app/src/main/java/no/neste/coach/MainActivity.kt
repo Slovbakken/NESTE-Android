@@ -564,43 +564,111 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
 }
 
 @Composable private fun Onboarding(store:CoachStore,onNotifications:()->Unit){
-    var step by rememberSaveable{mutableIntStateOf(0)}
-    val picked=remember{mutableStateListOf("family","work","training")}
-    Column(Modifier.fillMaxSize().background(Paper).statusBarsPadding().navigationBarsPadding().padding(horizontal=24.dp).padding(top=44.dp,bottom=24.dp)){
-        Row(verticalAlignment=Alignment.CenterVertically){Box(Modifier.size(48.dp).background(Forest,RoundedCornerShape(15.dp)),contentAlignment=Alignment.Center){Text("N",fontSize=23.sp,color=White,fontWeight=FontWeight.Bold)};Spacer(Modifier.width(13.dp));Text("NESTE",fontSize=19.sp,fontWeight=FontWeight.SemiBold,letterSpacing=2.sp,color=Forest)}
-        Spacer(Modifier.height(50.dp))
-        MiniLabel("${step+1} AV 3")
-        Spacer(Modifier.height(12.dp))
-        Text(when(step){0->"Hva vil du ha mer av?";1->"Et lite dytt, når det passer.";else->"Én ting av gangen."},style=MaterialTheme.typography.headlineLarge)
-        Spacer(Modifier.height(12.dp))
-        Text(when(step){0->"Velg inntil tre fokusområder. Dette kan endres senere.";1->"NESTE kan sende et rolig morgenvarsel. Du styrer om det er på.";else->"Ingen poeng, ingen skyld. Vi finner ett overkommelig steg i dag."},color=Muted,fontSize=16.sp,lineHeight=24.sp)
-        Spacer(Modifier.height(28.dp))
-        when(step){
-            0->Column(verticalArrangement=Arrangement.spacedBy(9.dp)){
-                store.areaNames.forEach{(area,label)->
-                    val active=area in picked
-                    Surface(shape=RoundedCornerShape(14.dp),color=if(active)Sage else White,onClick={if(active)picked.remove(area) else if(picked.size<3)picked.add(area)}){
-                        Row(Modifier.fillMaxWidth().padding(15.dp),verticalAlignment=Alignment.CenterVertically){Text(label,Modifier.weight(1f),color=Ink,fontSize=15.sp);if(active)Icon(Icons.Default.Check,null,tint=Forest)}
-                    }
-                }
-            }
-            1->Surface(color=Sage,shape=RoundedCornerShape(19.dp)){
-                Row(Modifier.fillMaxWidth().padding(22.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Default.NotificationsActive,null,tint=Forest);Spacer(Modifier.width(16.dp));Column {Text("08:15",fontSize=22.sp,fontWeight=FontWeight.Medium);Text("Dagens lille steg er klart",fontSize=13.sp,color=Muted)}}
-            }
-            else->Surface(color=Forest,shape=RoundedCornerShape(24.dp)){
-                Column(Modifier.fillMaxWidth().padding(22.dp)){
-                    MiniLabel("DITT FØRSTE STEG")
-                    Spacer(Modifier.height(10.dp));Text("Begynn der du er.",color=White,fontSize=25.sp,fontWeight=FontWeight.SemiBold)
-                    Spacer(Modifier.height(12.dp));Text("Du kan gjøre enhver anbefaling mindre. Det er en funksjon, ikke et nederlag.",color=Color(0xFFDBE6DC),fontSize=15.sp)
+    var step by rememberSaveable { mutableIntStateOf(0) }
+    // Bundled string survives rotation/process recreation; the user can change all choices later.
+    var selection by rememberSaveable { mutableStateOf("family,work,training") }
+    val picked = selection.split(",").filter { it.isNotBlank() }
+    val advance = {
+        if(step<2) step++ else {
+            store.setOnboarded(picked.toSet())
+            if(store.reminders().optJSONObject("morning")?.optBoolean("on")==true) onNotifications()
+        }
+    }
+    Scaffold(
+        modifier=Modifier.fillMaxSize(),
+        containerColor=Paper,
+        contentWindowInsets=WindowInsets.safeDrawing,
+        bottomBar={
+            Surface(color=Paper,shadowElevation=8.dp){
+                Column(
+                    Modifier.fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(start=24.dp,end=24.dp,top=12.dp,bottom=12.dp)
+                ){
+                    SolidButton(
+                        label=if(step==2)"Åpne NESTE" else "Fortsett",
+                        onClick=advance,
+                        modifier=Modifier.fillMaxWidth()
+                    )
+                    if(step>0) SoftButton("Tilbake",onClick={step--},modifier=Modifier.fillMaxWidth())
                 }
             }
         }
-        Spacer(Modifier.weight(1f))
-        SolidButton(if(step==2)"Åpne NESTE" else "Fortsett",onClick={if(step<2)step++ else {store.setOnboarded(picked.toSet());if(store.reminders().optJSONObject("morning")?.optBoolean("on")==true)onNotifications()}},modifier=Modifier.fillMaxWidth())
-        if(step>0) SoftButton("Tilbake",onClick={step--},modifier=Modifier.fillMaxWidth())
+    ){ insets ->
+        Column(
+            Modifier.fillMaxSize()
+                .padding(insets)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal=24.dp)
+                .padding(top=22.dp,bottom=28.dp)
+        ){
+            Row(verticalAlignment=Alignment.CenterVertically){
+                Box(Modifier.size(48.dp).background(Forest,RoundedCornerShape(15.dp)),contentAlignment=Alignment.Center){
+                    Text("N",fontSize=23.sp,color=White,fontWeight=FontWeight.Bold)
+                }
+                Spacer(Modifier.width(13.dp))
+                Text("NESTE",fontSize=19.sp,fontWeight=FontWeight.SemiBold,letterSpacing=2.sp,color=Forest)
+            }
+            Spacer(Modifier.height(28.dp))
+            MiniLabel("${step+1} AV 3")
+            Spacer(Modifier.height(12.dp))
+            Text(when(step){
+                0->"Hva vil du ha mer av?"
+                1->"Et lite dytt, når det passer."
+                else->"Én ting av gangen."
+            },style=MaterialTheme.typography.headlineLarge)
+            Spacer(Modifier.height(12.dp))
+            Text(when(step){
+                0->"Velg inntil tre fokusområder. Dette kan endres senere."
+                1->"NESTE kan sende et rolig morgenvarsel. Du styrer om det er på."
+                else->"Ingen poeng, ingen skyld. Vi finner ett overkommelig steg i dag."
+            },color=Muted,fontSize=16.sp,lineHeight=24.sp)
+            Spacer(Modifier.height(24.dp))
+            when(step){
+                0->Column(verticalArrangement=Arrangement.spacedBy(9.dp)){
+                    store.areaNames.forEach { (area,label) ->
+                        val active=area in picked
+                        Surface(
+                            shape=RoundedCornerShape(14.dp),
+                            color=if(active)Sage else White,
+                            onClick={
+                                selection=when {
+                                    active -> picked.filterNot { it==area }.joinToString(",")
+                                    picked.size<3 -> (picked+area).joinToString(",")
+                                    else -> selection
+                                }
+                            }
+                        ){
+                            Row(Modifier.fillMaxWidth().heightIn(min=58.dp).padding(horizontal=15.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically){
+                                Text(label,Modifier.weight(1f),color=Ink,fontSize=15.sp)
+                                if(active) Icon(Icons.Default.Check,null,tint=Forest)
+                            }
+                        }
+                    }
+                }
+                1->Surface(color=Sage,shape=RoundedCornerShape(19.dp)){
+                    Row(Modifier.fillMaxWidth().padding(22.dp),verticalAlignment=Alignment.CenterVertically){
+                        Icon(Icons.Default.NotificationsActive,null,tint=Forest)
+                        Spacer(Modifier.width(16.dp))
+                        Column {
+                            Text("08:15",fontSize=22.sp,fontWeight=FontWeight.Medium)
+                            Text("Dagens lille steg er klart",fontSize=13.sp,color=Muted)
+                        }
+                    }
+                }
+                else->Surface(color=Forest,shape=RoundedCornerShape(24.dp)){
+                    Column(Modifier.fillMaxWidth().padding(22.dp)){
+                        MiniLabel("DITT FØRSTE STEG")
+                        Spacer(Modifier.height(10.dp))
+                        Text("Begynn der du er.",color=White,fontSize=25.sp,fontWeight=FontWeight.SemiBold)
+                        Spacer(Modifier.height(12.dp))
+                        Text("Du kan gjøre enhver anbefaling mindre. Det er en funksjon, ikke et nederlag.",color=Color(0xFFDBE6DC),fontSize=15.sp)
+                    }
+                }
+            }
+        }
     }
 }
-
 
 @Composable private fun NewCardSheet(store:CoachStore,onClose:()->Unit){
     var question by rememberSaveable{mutableStateOf("")}
