@@ -1,6 +1,5 @@
 package no.neste.coach
 
-import android.Manifest
 import android.app.AppOpsManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
@@ -9,7 +8,6 @@ import android.content.pm.PackageManager
 import android.os.Process
 import java.time.LocalDate
 import java.time.ZoneId
-import kotlin.math.max
 
 /**
  * Local Android usage-access bridge. This is not a Digital Wellbeing private API.
@@ -41,11 +39,12 @@ class ScreenTimeRepository(private val context: Context) {
             ?:return Snapshot(true,emptyList(),now)
         val zone=ZoneId.systemDefault()
         val today=LocalDate.now(zone)
-        val days=(6 downTo 0).mapNotNull { off ->
+        val days=(6 downTo 0).map { off ->
             val date=today.minusDays(off.toLong())
             val begin=date.atStartOfDay(zone).toInstant().toEpochMilli()
             val end=minOf(now,date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli())
-            if(begin>=end) null else loadDay(usage,date,begin,end)
+            if(begin>=end) DayTime(date.toString(),0L,emptyList(),"utilgjengelig")
+            else loadDay(usage,date,begin,end) ?: DayTime(date.toString(),0L,emptyList(),"utilgjengelig")
         }
         return Snapshot(true,days,now)
     }
