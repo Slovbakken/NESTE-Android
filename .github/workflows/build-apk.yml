@@ -17,15 +17,14 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Bruk Android SDK installert på GitHub-runner
-        run: |
-          echo "ANDROID_HOME=${ANDROID_HOME}"
-          command -v sdkmanager
-          sdkmanager --version
       - name: Installer Android platform og build-tools
+        shell: bash
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | sort -V | tail -n 1)"
+          test -n "$SDKMANAGER"
+          echo "Bruker $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
       - name: Installer Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
