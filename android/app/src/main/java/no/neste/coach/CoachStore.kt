@@ -57,6 +57,12 @@ class CoachStore(private val context: Context) {
     fun capacity(): String = data.optJSONObject("settings")?.optString("capacity", "normal") ?: "normal"
     fun reducedMotion() = data.optJSONObject("settings")?.optBoolean("reducedMotion", false) ?: false
     fun haptics() = data.optJSONObject("settings")?.optBoolean("haptics", true) ?: true
+    // Optional personal goal: zero means no target. Device usage history is never stored here.
+    fun screenTimeGoalMinutes():Int = data.optJSONObject("settings")?.optInt("screenTimeGoalMinutes",0)?.coerceIn(0,600) ?: 0
+    fun setScreenTimeGoalMinutes(minutes:Int) {
+        require(minutes == 0 || minutes in 30..600) { "Ugyldig skjermtidsmål" }
+        update { it.getJSONObject("settings").put("screenTimeGoalMinutes",minutes) }
+    }
     fun priority(area: String) = data.optJSONObject("areas")?.optInt(area, 0) ?: 0
     fun allTasks(): List<JSONObject> { val a = data.optJSONArray("tasks") ?: JSONArray(); return (0 until a.length()).mapNotNull { a.optJSONObject(it) } }
     fun reminders(): JSONObject = data.optJSONObject("reminders") ?: JSONObject()
