@@ -683,7 +683,8 @@ private fun formatUsageTime(minutes:Int):String =
     var appRange by rememberSaveable{mutableStateOf("week")}
     var expandedApp by rememberSaveable{mutableStateOf<String?>(null)}
     var showAllApps by rememberSaveable{mutableStateOf(false)}
-    val guard=remember(LocalContext.current){FocusGuardStore(LocalContext.current)}
+    val usageContext=LocalContext.current
+    val guard=remember(usageContext){FocusGuardStore(usageContext)}
     Column(
         Modifier.fillMaxSize().background(Paper).then(
             if(embedded) Modifier else Modifier.statusBarsPadding().navigationBarsPadding()
