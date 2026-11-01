@@ -85,6 +85,13 @@ class FocusGuardActivity:ComponentActivity() {
     val running=settings.enabled()
     var selected by rememberSaveable{mutableStateOf(rules.map{it.pkg}.joinToString("|"))}
     val chosen=selected.split("|").filter{it.isNotBlank()}.toSet()
+    // Draft selections are kept separate from persisted, enforced rules until approval.
+    val activePackages=if(running)rules.map{it.pkg}.toSet() else emptySet()
+    val quotaPackages=if(running)activePackages else chosen
+    val todayByPackage=snapshot.today?.apps?.associateBy{it.packageName}?:emptyMap()
+    val totalIncludedMinutes=quotaPackages.sumOf{todayByPackage[it]?.minutes?:0}
+    val pendingChanges=running && chosen!=activePackages
+    val savedRules=rules.associateBy{it.pkg}
     val allApps=snapshot.days.flatMap{it.apps}
         .filter{FocusGuardStore.canRestrict(it.packageName)}
         .groupBy{it.packageName}
@@ -144,6 +151,67 @@ class FocusGuardActivity:ComponentActivity() {
                     }
                 }
                 FocusCard {
+                    Row(verticalAlignment=Alignment.CenterVertically){
+                        Text("Apper i kvoten",fontWeight=FontWeight.SemiBold,color=Ink,
+                            modifier=Modifier.weight(1f))
+                        Text(if(running)"AKTIV" else "FORSLAG",fontSize=11.sp,
+                            fontWeight=FontWeight.SemiBold,color=if(running)Green else Muted)
+                    }
+                    Text(if(running)
+                        "Disse appene teller mot hver sin dagsgrense."
+                        else "Dette er appene du har valgt. Ingen kvote håndheves før du godkjenner planen.",
+                        color=Muted,fontSize=13.sp,lineHeight=19.sp)
+                    if(quotaPackages.isEmpty()) {
+                        Text("Ingen apper valgt ennå. Velg dem i listen nedenfor.",
+                            color=Muted,fontSize=13.sp)
+                    } else {
+                        Row(verticalAlignment=Alignment.CenterVertically){
+                            Text(totalIncludedMinutes.toString()+" min",fontSize=30.sp,
+                                fontWeight=FontWeight.SemiBold,color=Green)
+                            Spacer(Modifier.width(10.dp))
+                            Text("samlet bruk i valgte apper i dag",
+                                modifier=Modifier.weight(1f),fontSize=12.sp,color=Muted)
+                        }
+                        quotaPackages.toList().sortedBy { pkg ->
+                            todayByPackage[pkg]?.displayName?:pkg.substringAfterLast('.')
+                        }.forEach{ pkg->
+                            val rule=savedRules[pkg]
+                            val today=todayByPackage[pkg]
+                            val name=today?.displayName?:allApps.firstOrNull{it.first==pkg}?.second
+                                ?:pkg.substringAfterLast('.')
+                            val used=today?.minutes?:0
+                            val limit=rule?.let{settings.currentLimit(it)}
+                                ?:settings.observedAverage(pkg,snapshot)
+                            val remaining=(limit-used).coerceAtLeast(0)
+                            HorizontalDivider(color=Soft)
+                            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+                                Column(Modifier.weight(1f)){
+                                    Text(name,fontWeight=FontWeight.Medium,color=Ink,fontSize=15.sp,
+                                        maxLines=1)
+                                    Text(if(running && rule!=null)
+                                        "I dag: "+used+" / "+limit+" min · "+remaining+" min igjen"
+                                        else "I dag: "+used+" min · foreslått grense "+limit+" min",
+                                        color=Muted,fontSize=12.sp)
+                                }
+                                Text(if(running && rule!=null && used>=limit)
+                                    "NÅDD" else if(running && rule!=null)"TELLER"
+                                    else "VALGT",fontSize=10.sp,
+                                    fontWeight=FontWeight.SemiBold,color=Green)
+                            }
+                            LinearProgressIndicator(
+                                progress={ (used.toFloat()/limit.coerceAtLeast(1)).coerceIn(0f,1f) },
+                                modifier=Modifier.fillMaxWidth().height(5.dp),
+                                color=Green,trackColor=Soft)
+                        }
+                        Text("Samlet tid er kun en oversikt. Hver app har sin egen grense.",
+                            fontSize=11.sp,color=Muted,lineHeight=16.sp)
+                    }
+                    if(pendingChanges) {
+                        Text("Du har endret valget. De nye appene teller først etter at du trykker «Oppdater valgte apper».",
+                            fontSize=12.sp,color=Muted,lineHeight=18.sp)
+                    }
+                }
+                FocusCard {
                     Text("Sperren trenger egen tillatelse",fontWeight=FontWeight.SemiBold,color=Ink)
                     Text("Androids tilgjengelighetstjeneste ser bare navnet på appen som åpnes. NESTE viser en sperreskjerm når en valgt app når grensen. Hele telefonen låses aldri.",
                         fontSize=13.sp,lineHeight=20.sp,color=Muted)
@@ -168,9 +236,9 @@ class FocusGuardActivity:ComponentActivity() {
                         fontSize=12.sp,color=Muted,lineHeight=18.sp)
                 }
                 FocusCard {
-                    Text("Velg appene du vil begrense",fontWeight=FontWeight.SemiBold,color=Ink)
-                    Text("Du velger selv. Systemfunksjoner og viktige apper er unntatt.",
-                        fontSize=13.sp,color=Muted)
+                    Text("Alle apper · velg hva som teller",fontWeight=FontWeight.SemiBold,color=Ink)
+                    Text("Huk av for å ta en app med i kvoten. Apper uten avhuking er utenfor Fokusvern. Systemfunksjoner og viktige apper er alltid unntatt.",
+                        fontSize=13.sp,color=Muted,lineHeight=19.sp)
                     if(allApps.isEmpty())Text("Ingen bruksdata ennå. Åpne NESTE igjen etter at du har brukt telefonen.",
                         fontSize=13.sp,color=Muted)
                     allApps.forEach{(pkg,label,ms)->
@@ -185,13 +253,15 @@ class FocusGuardActivity:ComponentActivity() {
                             })
                             Column(Modifier.weight(1f)){
                                 Text(label,color=Ink,fontSize=14.sp,maxLines=1)
-                                Text("Gj.snitt siste dager: "+settings.observedAverage(pkg,snapshot)+" min/dag",
+                                Text((if(marked)"Valgt · " else "Utenfor kvoten · ")+
+                                        "snitt "+settings.observedAverage(pkg,snapshot)+" min/dag",
                                     color=Muted,fontSize=11.sp)
                             }
                         }
                     }
                     if(chosen.isNotEmpty()){
-                        Text(chosen.size.toString()+" av 8 apper valgt",fontSize=12.sp,color=Muted)
+                        Text(chosen.size.toString()+" av 8 apper valgt for kvote",
+                            fontSize=12.sp,color=Muted)
                         if(!access) {
                             Text("Aktiver tilgjengelighetstillatelsen før du tester.",fontSize=12.sp,color=Muted)
                         }else{
@@ -214,6 +284,8 @@ class FocusGuardActivity:ComponentActivity() {
                     }
                     if(days<7)Text("Du kan teste sperren nå, men nedtrapping starter først etter observasjonsperioden.",
                         fontSize=12.sp,color=Muted)
+                    if(running && chosen==activePackages)
+                        Text("Ingen endringer i aktive kvoter.",fontSize=12.sp,color=Muted)
                 }
                 Text("Ingen app låses på systemnivå. På enkelte Android-modeller kan tilgjengelighetstjenesten stoppes av systemet. Tilgjengelighetstilgangen kan slås av i Android-innstillinger.",
                     color=Muted,fontSize=12.sp,lineHeight=18.sp)
