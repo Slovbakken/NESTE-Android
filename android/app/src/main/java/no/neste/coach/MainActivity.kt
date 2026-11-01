@@ -65,10 +65,14 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.delay
 import org.json.JSONTokener
+import java.time.Instant
+import java.time.ZoneOffset
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.roundToInt
+import android.widget.Toast
 
 private val Paper=Color(0xFFF6F5F0)
 private val White=Color(0xFFFFFFFF)
@@ -82,6 +86,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var coach:CoachStore
     private var migrationLoading by mutableStateOf(true)
     private var screenTimeMinutes by mutableIntStateOf(-1)
+    private var migrationIssue by mutableStateOf<String?>(null)
     private val requestNotification = registerForActivityResult(ActivityResultContracts.RequestPermission()){ granted ->
         if(!granted) { /* Settings shows that notifications need system permission. */ }
     }
@@ -91,8 +96,10 @@ class MainActivity : ComponentActivity() {
     private val importLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()){uri->
         if(uri!=null)try {
             val content=contentResolver.openInputStream(uri)?.bufferedReader()?.use{it.readText()}?:return@registerForActivityResult
-            coach.importBackup(content)
-        }catch(_:Exception){}
+            val success=coach.importBackup(content)
+            Toast.makeText(this,if(success)"Sikkerhetskopien er importert" else "Import mislyktes. Eksisterende data er beholdt.",Toast.LENGTH_LONG).show()
+            if(success && migrationIssue!=null) migrationIssue=null
+        }catch(e:Exception){Toast.makeText(this,"Kunne ikke lese filen. Ingen data er slettet.",Toast.LENGTH_LONG).show()}
     }
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState)
@@ -101,13 +108,33 @@ class MainActivity : ComponentActivity() {
         ReminderReceiver.createChannel(this)
         // Critical: the hidden, temporary compatibility WebView is never the actual UI.
         // The exact old URL preserves the V1 file origin for localStorage reads.
-        if(coach.isMigrationPending()) migrateLegacyWebStorage()
-        else {coach.syncReminders();migrationLoading=false}
+        if(coach.hasDamagedNativeData()){
+            migrationIssue="Lagrede data kan ikke leses. Importer en sikkerhetskopi eller start på nytt. Originalfilen beholdes."
+            migrationLoading=false
+        } else if(coach.isMigrationPending()) migrateLegacyWebStorage()
+        else {runCatching{coach.syncReminders()};migrationLoading=false}
         setContent {
             val currentRevision=coach.revision
             @Suppress("UNUSED_VARIABLE") val recompose=currentRevision
             NesteTheme { if(migrationLoading) {
                 Box(Modifier.fillMaxSize().background(Paper),contentAlignment=Alignment.Center){CircularProgressIndicator(color=Forest)}
+            } else if(migrationIssue!=null) {
+                Column(Modifier.fillMaxSize().background(Paper).statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(28.dp),
+                    verticalArrangement=Arrangement.spacedBy(18.dp)){
+                    Spacer(Modifier.height(45.dp))
+                    Text("Dine data først.",style=MaterialTheme.typography.headlineLarge)
+                    Text(migrationIssue?:"",color=Muted,lineHeight=24.sp)
+                    SolidButton("Importer sikkerhetskopi",onClick={importLauncher.launch(arrayOf("application/json","text/plain"))},modifier=Modifier.fillMaxWidth())
+                    SoftButton("Prøv å hente gammel lagring igjen",onClick={
+                        if(!coach.hasDamagedNativeData()){migrationLoading=true;migrationIssue=null;migrateLegacyWebStorage()}
+                    },modifier=Modifier.fillMaxWidth())
+                    SoftButton("Start med et nytt oppsett",onClick={
+                        val restored=if(coach.hasDamagedNativeData())coach.recoverDamagedNativeData() else runCatching{coach.initializeFreshIfMissing();true}.getOrDefault(false)
+                        if(restored)migrationIssue=null
+                        else Toast.makeText(this@MainActivity,"Kunne ikke sikre tidligere data",Toast.LENGTH_LONG).show()
+                    },modifier=Modifier.fillMaxWidth())
+                    Text("Ingenting slettes automatisk. En ny start krever et aktivt valg.",fontSize=13.sp,color=Muted)
+                }
             } else NesteApp(coach,
                 screenTimeMinutes=screenTimeMinutes,
                 onExport={exportLauncher.launch("neste-backup-${coach.today()}.json")},
@@ -148,9 +175,10 @@ class MainActivity : ComponentActivity() {
                 w.evaluateJavascript("(function(){try{return localStorage.getItem('neste_state_v1')||''}catch(e){return ''}})()") {result->
                     try {
                         val legacy=JSONTokener(result).nextValue() as? String
-                        if(!legacy.isNullOrBlank())coach.importLegacy(legacy)
-                        else coach.initializeFreshIfMissing()
-                    }catch(_:Exception){/* preserve original web data; let user import backup manually */}
+                        if(!legacy.isNullOrBlank()){
+                            if(!coach.importLegacy(legacy))migrationIssue="Automatisk import mislyktes. Originaldata er ikke slettet."
+                        }else migrationIssue="Fant ingen eldre data i appens lager. Du kan starte nytt eller importere en sikkerhetskopi."
+                    }catch(e:Exception){migrationIssue="Kunne ikke undersøke gammel lagring. Originaldata er beholdt."}
                     migrationLoading=false
                     (w.parent as? ViewGroup)?.removeView(w)
                     w.destroy()
@@ -161,7 +189,7 @@ class MainActivity : ComponentActivity() {
         w.loadUrl("file:///android_asset/index.html")
         // If legacy WebView never finishes loading, do not hold users on a spinner.
         // The original WebView data remains untouched for manual JSON recovery.
-        Handler(Looper.getMainLooper()).postDelayed({if(migrationLoading){migrationLoading=false;(w.parent as? ViewGroup)?.removeView(w);w.destroy()}},8000L)
+        Handler(Looper.getMainLooper()).postDelayed({if(migrationLoading){migrationIssue="Migrering brukte for lang tid. Tidligere data er ikke slettet.";migrationLoading=false;(w.parent as? ViewGroup)?.removeView(w);w.destroy()}},8000L)
     }
 }
 
@@ -176,7 +204,7 @@ class MainActivity : ComponentActivity() {
 }
 
 private enum class Page { TODAY, PLAN, PROGRESS, ME }
-private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOTIFICATION, NEW_CARD, REVIEW_CARD }
+private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOTIFICATION, NEW_CARD, REVIEW_CARD, CHECKIN }
 
 @Composable private fun NesteApp(store:CoachStore,screenTimeMinutes:Int,onExport:()->Unit,onImport:()->Unit,onPermission:()->Unit,onScreenTime:()->Unit){
     var page by rememberSaveable { mutableStateOf(Page.TODAY) }
@@ -187,6 +215,7 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
     // whether the onboarding screen disappears after pressing the final button.
     var onboardingFinished by remember { mutableStateOf(store.onboarded()) }
     val motion=!store.reducedMotion()
+    LaunchedEffect(store.revision) { if(!store.onboarded()) onboardingFinished=false }
     BackHandler(enabled=focus){focus=false}
     BackHandler(enabled=!focus && page!=Page.TODAY && sheet==null){page=Page.TODAY}
     if(!onboardingFinished){
@@ -221,7 +250,7 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
     if(sheet!=null) {
         val current=sheet!!
         ModalBottomSheet(onDismissRequest={sheet=null},containerColor=White,dragHandle={ BottomSheetDefaults.DragHandle(color=Line) },shape=RoundedCornerShape(topStart=28.dp,topEnd=28.dp)){
-            Box(Modifier.navigationBarsPadding().imePadding().fillMaxWidth().padding(horizontal=24.dp).padding(bottom=24.dp)){
+            Box(Modifier.navigationBarsPadding().imePadding().fillMaxWidth().heightIn(max=580.dp).verticalScroll(rememberScrollState()).padding(horizontal=24.dp).padding(bottom=24.dp)){
                 when(current){
                     Sheet.CAPTURE -> CaptureSheet(store){sheet=null}
                     Sheet.CAPACITY -> CapacitySheet(store){sheet=null}
@@ -236,6 +265,7 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
                     Sheet.NOTIFICATION -> ReminderSheet(store,onPermission){sheet=null}
                     Sheet.NEW_CARD -> NewCardSheet(store){sheet=null}
                     Sheet.REVIEW_CARD -> ReviewCardSheet(store){sheet=null}
+                    Sheet.CHECKIN -> CheckinSheet(store){sheet=null}
                 }
             }
         }
@@ -305,7 +335,11 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
         Surface(shape=RoundedCornerShape(14.dp),color=Sage,onClick={onSheet(Sheet.CAPACITY)}){
             Row(Modifier.padding(horizontal=14.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Default.BatteryChargingFull,null,tint=Forest,modifier=Modifier.size(18.dp));Spacer(Modifier.width(7.dp));Text("Kapasitet: "+when(cap){"low"->"Lite";"high"->"Mye";else->"Normal"},fontSize=13.sp,color=Forest,fontWeight=FontWeight.Medium);Spacer(Modifier.width(10.dp));Icon(Icons.Default.ExpandMore,null,tint=Forest,modifier=Modifier.size(17.dp))}
         }
-        Spacer(Modifier.height(30.dp))
+        Spacer(Modifier.height(12.dp))
+        SoftButton(if(store.todayLog().has("energy10"))"Oppdater dagens innsjekk" else "Dagens innsjekk · 30 sek",onClick={onSheet(Sheet.CHECKIN)})
+        val hint=store.adaptiveHint()
+        if(hint.isNotBlank()) Text(hint,color=Muted,fontSize=13.sp,lineHeight=18.sp)
+        Spacer(Modifier.height(16.dp))
         MiniLabel(if(result.isEmpty())"Det viktigste i dag" else "Dagens steg")
         Spacer(Modifier.height(13.dp))
         if(result.isNotEmpty()){
@@ -370,14 +404,23 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
 
 @Composable private fun PlanScreen(store:CoachStore,onSheet:(Sheet)->Unit){
     var selected by rememberSaveable{mutableIntStateOf(0)}
-    val today=LocalDate.now().toString(); val soon=LocalDate.now().plusDays(7).toString()
-    val tasks=store.allTasks().filter{!it.optBoolean("done")}.filter{obj->val d=obj.optString("due"); when(selected){0->d.isNotEmpty()&&d<=today;1->d.isNotEmpty()&&d>today&&d<=soon;else->d.isEmpty()||d>soon}}
+    val today=LocalDate.now(ZoneId.of("Europe/Oslo")).toString()
+    val soon=LocalDate.now(ZoneId.of("Europe/Oslo")).plusDays(7).toString()
+    val tasks=store.allTasks().filter{obj->
+        val d=obj.optString("due")
+        when(selected){
+            0-> !obj.optBoolean("done")&&d.isNotEmpty()&&d<=today
+            1-> !obj.optBoolean("done")&&d.isNotEmpty()&&d>today&&d<=soon
+            2-> !obj.optBoolean("done")&&(d.isEmpty()||d>soon)
+            else->obj.optBoolean("done")
+        }
+    }
     Column(Modifier.fillMaxSize()){
         Column(Modifier.padding(horizontal=24.dp).padding(top=30.dp)){
             Intro("Det du har foran deg","Plan")
             Spacer(Modifier.height(10.dp));Text("Fang opp det som ellers ville blitt glemt.",color=Muted,fontSize=15.sp)
             Spacer(Modifier.height(24.dp))
-            Row(horizontalArrangement=Arrangement.spacedBy(7.dp)){listOf("I dag","Snart","Senere").forEachIndexed{index,title->Chip(title,selected==index){selected=index}}}
+            Row(horizontalArrangement=Arrangement.spacedBy(7.dp)){listOf("I dag","Snart","Senere","Fullført").forEachIndexed{index,title->Chip(title,selected==index){selected=index}}}
             Spacer(Modifier.height(19.dp))
         }
         Row(Modifier.fillMaxWidth().padding(horizontal=24.dp).padding(bottom=14.dp),verticalAlignment=Alignment.CenterVertically){
@@ -388,14 +431,14 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
         if(tasks.isEmpty()){
             Column(Modifier.fillMaxWidth().padding(24.dp),horizontalAlignment=Alignment.Start){
                 HorizontalDivider(color=Line);Spacer(Modifier.height(28.dp))
-                Text(if(selected==0)"Ingen oppgaver med frist i dag." else "Ingenting planlagt her ennå.",fontSize=21.sp,fontWeight=FontWeight.Medium,color=Ink)
+                Text(if(selected==0)"Ingen oppgaver med frist i dag." else if(selected==3)"Ingen fullførte oppgaver her ennå." else "Ingenting planlagt her ennå.",fontSize=21.sp,fontWeight=FontWeight.Medium,color=Ink)
                 Spacer(Modifier.height(8.dp));Text("Legg til noe du vil ta ansvar for, når det dukker opp.",color=Muted)
                 Spacer(Modifier.height(18.dp));SoftButton("+ Fang opp",onClick={onSheet(Sheet.CAPTURE)})
             }
         }else LazyColumn(contentPadding=PaddingValues(horizontal=24.dp,vertical=8.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
             items(tasks,key={it.optString("id")}){ task->
                 Row(Modifier.fillMaxWidth().background(White,RoundedCornerShape(19.dp)).padding(15.dp),verticalAlignment=Alignment.CenterVertically){
-                    IconButton(onClick={store.completeTask(task.optString("id"))},modifier=Modifier.size(42.dp)){Icon(Icons.Default.RadioButtonUnchecked,"Marker gjort",tint=Forest)}
+                    IconButton(onClick={store.completeTask(task.optString("id"))},modifier=Modifier.size(42.dp)){Icon(if(task.optBoolean("done"))Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,if(task.optBoolean("done"))"Angre fullføring" else "Marker gjort",tint=Forest)}
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)){
                         Text(task.optString("title"),fontWeight=FontWeight.Medium,fontSize=15.sp,color=Ink)
@@ -440,7 +483,21 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
             StatTile("Forenklet",small.toString(),Modifier.weight(1f))
             StatTile("Stått over",skipped.toString(),Modifier.weight(1f))
         }
-        Spacer(Modifier.height(27.dp))
+        Spacer(Modifier.height(20.dp))
+        val measured=(0L..6L).mapNotNull { off->
+            val day=LocalDate.now(ZoneId.of("Europe/Oslo")).minusDays(off).toString()
+            store.logs().optJSONObject(day)?.takeIf{it.optString("checkinScale")=="0-10"}
+        }
+        if(measured.isNotEmpty()){
+            MiniLabel("Innsjekker · 0–10")
+            Spacer(Modifier.height(7.dp))
+            Text("Energi: "+("%.1f".format(Locale.ROOT,measured.map{it.optInt("energy10")}.average()))+
+                "   Søvn: "+("%.1f".format(Locale.ROOT,measured.map{it.optInt("sleep10")}.average()))+
+                "   (${measured.size} dager)",fontSize=14.sp,color=Ink)
+            Spacer(Modifier.height(7.dp))
+            Text("Dette er egenrapporterte observasjoner, ikke en diagnose.",color=Muted,fontSize=12.sp)
+            Spacer(Modifier.height(20.dp))
+        }
         MiniLabel("Kort refleksjon")
         Spacer(Modifier.height(9.dp))
         Text(if(done+small==0)"Ingen handlinger registrert ennå. Vi trenger ikke tolke det som manglende fremgang." else "Du har registrert ${done+small} handlinger. Legg merke til hvilke situasjoner som gjorde dem mulige.",fontSize=15.sp,color=Ink,lineHeight=23.sp)
@@ -535,17 +592,47 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
     SolidButton("Vis et annet steg",onClick=onConfirm,modifier=Modifier.fillMaxWidth())
     SoftButton("Behold dette",onClose,Modifier.fillMaxWidth())
 }}
+@Composable private fun CheckinSheet(store:CoachStore,onClose:()->Unit) {
+    val log=store.todayLog()
+    var energy by rememberSaveable{mutableFloatStateOf(log.optInt("energy10",5).toFloat())}
+    var stress by rememberSaveable{mutableFloatStateOf(log.optInt("stress10",5).toFloat())}
+    var sleep by rememberSaveable{mutableFloatStateOf(log.optInt("sleep10",5).toFloat())}
+    var functioning by rememberSaveable{mutableFloatStateOf(log.optInt("functioning10",5).toFloat())}
+    var burden by rememberSaveable{mutableStateOf(log.optString("burden"))}
+    var recovery by rememberSaveable{mutableStateOf(log.optString("recovery"))}
+    Column(verticalArrangement=Arrangement.spacedBy(9.dp)){
+        Text("Hvordan har dagen vært?",style=MaterialTheme.typography.headlineMedium)
+        Text("Svar bare hvis det er nyttig. Tallene er ikke en prestasjon.",fontSize=14.sp,color=Muted)
+        listOf("Energi" to energy,"Stress" to stress,"Søvnkvalitet" to sleep,"Overskudd" to functioning).forEachIndexed { index,pair->
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
+                Text(pair.first,fontSize=14.sp)
+                Text(pair.second.roundToInt().toString()+"/10",color=Forest,fontWeight=FontWeight.Medium)
+            }
+            Slider(value=pair.second,onValueChange={
+                when(index){0->energy=it;1->stress=it;2->sleep=it;else->functioning=it}
+            },valueRange=0f..10f,steps=9,colors=SliderDefaults.colors(thumbColor=Forest,activeTrackColor=Forest))
+        }
+        OutlinedTextField(value=burden,onValueChange={burden=it.take(250)},label={Text("Viktigste belastning (valgfritt)")},modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp))
+        OutlinedTextField(value=recovery,onValueChange={recovery=it.take(250)},label={Text("Hva hjalp deg å hente deg inn? (valgfritt)")},modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp))
+        SolidButton("Lagre innsjekk",onClick={
+            store.saveCheckin(energy.roundToInt(),stress.roundToInt(),sleep.roundToInt(),functioning.roundToInt(),burden,recovery)
+            onClose()
+        },modifier=Modifier.fillMaxWidth())
+    }
+}
+
 @Composable private fun ReflectionSheet(store:CoachStore,onClose:()->Unit){
     var selected by rememberSaveable{mutableStateOf("")}
     var note by rememberSaveable{mutableStateOf("")}
+    val choices=listOf("easy" to "Lett å starte","low_energy" to "Lite energi","too_big" to "For stort steg","wrong_time" to "Feil tidspunkt")
     Column(verticalArrangement=Arrangement.spacedBy(14.dp)){
         Text("Hva hjalp i dag?",style=MaterialTheme.typography.headlineMedium)
         Text("Det er også nyttig å vite hva som gjorde ting vanskelig.",color=Muted)
-        listOf("Lett å starte","Lite energi","For stort steg","Feil tidspunkt").forEach{label->
-            Row(Modifier.fillMaxWidth().clickable{selected=label}.background(if(selected==label)Sage else Paper,RoundedCornerShape(12.dp)).padding(12.dp),verticalAlignment=Alignment.CenterVertically){Text(label,Modifier.weight(1f));if(selected==label)Icon(Icons.Default.Check,null,tint=Forest)}
+        choices.forEach{(code,label)->
+            Row(Modifier.fillMaxWidth().clickable{selected=code}.background(if(selected==code)Sage else Paper,RoundedCornerShape(12.dp)).padding(12.dp),verticalAlignment=Alignment.CenterVertically){Text(label,Modifier.weight(1f));if(selected==code)Icon(Icons.Default.Check,null,tint=Forest)}
         }
         OutlinedTextField(value=note,onValueChange={note=it.take(350)},label={Text("Noe mer? (valgfritt)")},modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(15.dp))
-        SolidButton("Lagre",onClick={store.setReflection(listOf(selected,note).filter{it.isNotBlank()}.joinToString(" · "));onClose()},modifier=Modifier.fillMaxWidth())
+        SolidButton("Lagre",onClick={store.setReflection(selected,note);onClose()},modifier=Modifier.fillMaxWidth())
     }
 }
 @Composable private fun ReminderSheet(store:CoachStore,onPermission:()->Unit,onClose:()->Unit){
