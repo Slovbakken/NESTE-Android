@@ -31,7 +31,7 @@ class ContractTests(unittest.TestCase):
         self.assertIn('android:allowBackup="false"',manifest)
         gradle=(ROOT/'android/app/build.gradle').read_text()
         self.assertGreaterEqual(int(re.search(r"versionCode ([0-9]+)",gradle).group(1)), 4)
-        self.assertRegex(gradle, r"versionName '1[.]2[.]0'")
+        self.assertRegex(gradle, r"versionName '1[.]2[.]1'")
         self.assertIn('compose true',gradle)
     def test_onboarding_exits_and_keeps_data(self):
         ui=(SRC/'MainActivity.kt').read_text()
@@ -48,6 +48,19 @@ class ContractTests(unittest.TestCase):
         tests=(ROOT/'android/app/src/test/java/no/neste/coach/CoachStoreTest.kt').read_text()
         for name in ('overdueTaskReplacesUnstartedPlan','checkinPreservesTenPointScale','invalidBackupKeepsOriginal','firstSuccessfulCardReviewDueTomorrow'):
             self.assertIn(name,tests)
+    def test_screen_time_android_bridge(self):
+        activity=(SRC/'MainActivity.kt').read_text()
+        bridge=(SRC/'ScreenTimeRepository.kt').read_text()
+        store=(SRC/'CoachStore.kt').read_text()
+        manifest=(ROOT/'android/app/src/main/AndroidManifest.xml').read_text()
+        for marker in ('ScreenTimeScreen(', 'screenTimeSnapshot', 'onRefreshScreenTime'):
+            self.assertIn(marker,activity)
+        for marker in ('ScreenTimeMath', 'UsageStatsManager','ACTION_RESUMED' if False else 'ACTIVITY_RESUMED'):
+            self.assertIn(marker,bridge)
+        self.assertIn('screenTimeGoalMinutes',store)
+        self.assertIn('android.permission.PACKAGE_USAGE_STATS',manifest)
+        self.assertNotIn('android.permission.INTERNET"',manifest)
+
     def test_state_compatibility(self):
         code=(SRC/'CoachStore.kt').read_text()
         for marker in ('AtomicFile','neste_state_native_v1.json','neste_legacy_v1_unmodified.json','importLegacy','importBackup','cards','tasks','logs','reminders','areas','plans','JSONArray','deleteAllData','dueCards','reviewCard','Europe/Oslo'):

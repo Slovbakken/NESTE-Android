@@ -61,6 +61,16 @@ class CoachStoreTest {
         assertTrue(saved.contains(LocalDate.parse(store.today()).plusDays(1).toString()))
     }
 
+    @Test fun screenTimeGoalIsOptionalAndPersists() {
+        assertEquals(0,store.screenTimeGoalMinutes())
+        store.setScreenTimeGoalMinutes(90)
+        assertEquals(90,store.screenTimeGoalMinutes())
+        val reloaded=CoachStore(RuntimeEnvironment.getApplication())
+        assertEquals(90,reloaded.screenTimeGoalMinutes())
+        store.setScreenTimeGoalMinutes(0)
+        assertEquals(0,store.screenTimeGoalMinutes())
+    }
+
     @Test fun reflectionUsesStructuredCode() {
         store.setReflection("too_big","Trenger mindre steg")
         assertEquals("too_big",store.todayLog().optString("reasonCode"))
