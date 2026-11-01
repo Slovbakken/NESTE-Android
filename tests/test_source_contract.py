@@ -90,6 +90,12 @@ class ContractTests(unittest.TestCase):
                      'Åpne brukstilgang',
                      'Sjekk tilgangen på nytt'):
             self.assertIn(text,activity)
+    def test_focusvern_navigation(self):
+        ui=(SRC/'MainActivity.kt').read_text()
+        self.assertEqual(ui.count('onFocusGuard={'),2)
+        self.assertNotIn('onFocusGuard:()->Unit={}',ui)
+        self.assertIn('activityContext.startActivity(',ui)
+
     def test_state_compatibility(self):
         code=(SRC/'CoachStore.kt').read_text()
         for marker in ('AtomicFile','neste_state_native_v1.json','neste_legacy_v1_unmodified.json','importLegacy','importBackup','cards','tasks','logs','reminders','areas','plans','JSONArray','deleteAllData','dueCards','reviewCard','Europe/Oslo'):
