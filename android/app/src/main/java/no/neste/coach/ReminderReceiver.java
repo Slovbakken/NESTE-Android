@@ -109,6 +109,17 @@ public class ReminderReceiver extends BroadcastReceiver {
             String date = new SimpleDateFormat("yyyy-MM-dd",Locale.ROOT).format(Calendar.getInstance().getTime());
             SharedPreferences p=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
             String planned=p.getString("advice_title_"+date, null);
+            // Recalculate from the same offline, persisted coach when the app
+            // has not been opened for >7 days. Never silently become generic.
+            try {
+                CoachStore coach=new CoachStore(context);
+                if(!coach.hasDamagedNativeData() && coach.onboarded()) {
+                    CoachStore.Action suggestion=coach.currentAction();
+                    planned=suggestion.getTitle();
+                }
+            } catch(Exception e) {
+                android.util.Log.w("NESTE","Using saved notification fallback",e);
+            }
             title = "NESTE · Dagens første steg";
             body = planned != null ? planned :
                 (day == Calendar.SATURDAY || day == Calendar.SUNDAY)
