@@ -85,6 +85,10 @@ class FocusGuardStore(private val context:Context) {
     fun testPkg():String?=prefs.getString("test_pkg",null)?.takeIf{
         System.currentTimeMillis()<prefs.getLong("test_until",0L)
     }
+    fun canMonitor(pkg:String):Boolean {
+        if(!consent() || !canRestrict(pkg))return false
+        return testPkg()==pkg || (enabled() && rules().any{it.pkg==pkg})
+    }
     fun canBlock(pkg:String):Boolean {
         if(!consent() || !canRestrict(pkg))return false
         if(testPkg()==pkg)return true

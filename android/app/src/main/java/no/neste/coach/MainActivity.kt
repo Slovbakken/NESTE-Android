@@ -58,6 +58,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -619,9 +620,14 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
             else "Koble til skjermtid (valgfritt)",
             onOpenScreenTime
         )
+        val currentContext=LocalContext.current
+        Spacer(Modifier.height(9.dp))
+        SoftButton("Fokusvern · appgrenser og gradvis nedtrapping",onClick={
+            currentContext.startActivity(Intent(currentContext,FocusGuardActivity::class.java))
+        })
         SoftButton("Slett alle lokale data",onClick={confirmDelete=true})
         Spacer(Modifier.height(12.dp));Text("Lagrede læringskort: ${store.cardsCount()} · Historiske innsjekker beholdes i original skala.",fontSize=12.sp,color=Muted)
-        Spacer(Modifier.height(26.dp));Text("NESTE 1.2.1 · Offline personlig coach",fontSize=12.sp,color=Muted)
+        Spacer(Modifier.height(26.dp));Text("NESTE 1.3.0 · Offline personlig coach",fontSize=12.sp,color=Muted)
     }
 }
 private fun formatUsageTime(minutes:Int):String =

@@ -58,7 +58,7 @@ class FocusGuardService:AccessibilityService() {
             foreground=pkg
             if(pkg!=overlayPkg)hideOverlay()
         }
-        if(::guard.isInitialized && guard.canBlock(pkg))check(pkg,true)
+        if(::guard.isInitialized && guard.canMonitor(pkg))check(pkg,true)
         else hideOverlay()
     }
     override fun onInterrupt(){hideOverlay()}
@@ -67,7 +67,7 @@ class FocusGuardService:AccessibilityService() {
         super.onDestroy()
     }
     private fun check(pkg:String,force:Boolean=false){
-        if(!::guard.isInitialized || !guard.canBlock(pkg) || guard.isBypassed(pkg)){
+        if(!::guard.isInitialized || !guard.canMonitor(pkg) || guard.isBypassed(pkg)){
             hideOverlay();return
         }
         val now=System.currentTimeMillis()
