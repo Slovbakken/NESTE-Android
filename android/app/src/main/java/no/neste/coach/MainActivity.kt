@@ -665,7 +665,7 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
         })
         SoftButton("Slett alle lokale data",onClick={confirmDelete=true})
         Spacer(Modifier.height(12.dp));Text("Lagrede læringskort: ${store.cardsCount()} · Historiske innsjekker beholdes i original skala.",fontSize=12.sp,color=Muted)
-        Spacer(Modifier.height(26.dp));Text("NESTE 1.3.2 · Offline personlig coach",fontSize=12.sp,color=Muted)
+        Spacer(Modifier.height(26.dp));Text("NESTE 1.3.3 · Offline personlig coach",fontSize=12.sp,color=Muted)
     }
 }
 private fun formatUsageTime(minutes:Int):String =
@@ -719,7 +719,7 @@ private fun formatUsageTime(minutes:Int):String =
                 Text("Koble til skjermtid",
                     style=MaterialTheme.typography.headlineMedium,color=Ink)
                 Spacer(Modifier.height(13.dp))
-                Text("NESTE trenger én tillatelse fra Android for å kunne vise hvor lenge du bruker appene dine.",
+                Text("NESTE trenger tillatelsen «Tilgang til bruksinformasjon» for å vise hvilke apper du bruker og hvor lenge.",
                     color=Muted,lineHeight=23.sp,fontSize=15.sp)
                 Spacer(Modifier.height(22.dp))
                 Surface(shape=RoundedCornerShape(20.dp),color=White){
@@ -738,10 +738,9 @@ private fun formatUsageTime(minutes:Int):String =
                         MiniLabel("SLIK GJØR DU")
                         Spacer(Modifier.height(13.dp))
                         listOf(
-                            "1" to "Trykk «Åpne Android-innstillinger» nedenfor.",
-                            "2" to "Finn NESTE under «Brukstilgang» eller «Tilgang til bruksdata».",
-                            "3" to "Aktiver «Tillat brukstilgang» for NESTE.",
-                            "4" to "Gå tilbake hit. Oversikten lastes da inn."
+                            "1" to "Trykk «Åpne brukstilgang» nedenfor.",
+                            "2" to "Velg NESTE og aktiver «Tillat brukstilgang».",
+                            "3" to "Gå tilbake til NESTE og trykk «Sjekk tilgangen på nytt»."
                         ).forEach{(number,instruction)->
                             Row(Modifier.fillMaxWidth().padding(bottom=13.dp),verticalAlignment=Alignment.Top){
                                 Box(Modifier.size(26.dp).background(Sage,CircleShape),
@@ -754,9 +753,50 @@ private fun formatUsageTime(minutes:Int):String =
                             }
                         }
                         Spacer(Modifier.height(8.dp))
-                        SolidButton("Åpne Android-innstillinger",onPermission,Modifier.fillMaxWidth())
+                        SolidButton("Åpne brukstilgang",onPermission,Modifier.fillMaxWidth())
                         Spacer(Modifier.height(7.dp))
                         SoftButton("Sjekk tilgangen på nytt",onRefresh,Modifier.fillMaxWidth())
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+                Surface(shape=RoundedCornerShape(18.dp),color=White){
+                    Column(Modifier.fillMaxWidth().padding(20.dp)){
+                        Row(verticalAlignment=Alignment.CenterVertically){
+                            Icon(Icons.Default.Info,null,tint=Forest,modifier=Modifier.size(19.dp))
+                            Spacer(Modifier.width(9.dp))
+                            Text("Står det «Kontrolleres av begrenset innstilling»?",
+                                fontSize=15.sp,fontWeight=FontWeight.SemiBold,color=Ink,
+                                modifier=Modifier.weight(1f))
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Text("Android kan begrense følsomme tillatelser når en app er installert fra en APK utenfor appbutikken. Dette er en sikkerhetsbeskyttelse, ikke en feil i NESTE.",
+                            fontSize=13.sp,color=Ink,lineHeight=20.sp)
+                        Spacer(Modifier.height(13.dp))
+                        listOf(
+                            "1" to "Åpne vanlig appinformasjon for NESTE nedenfor.",
+                            "2" to "Trykk på menyen med tre prikker (⋮) øverst til høyre.",
+                            "3" to "Velg «Tillat begrensede innstillinger» og bekreft hvis du stoler på APK-en.",
+                            "4" to "Gå tilbake til «Åpne brukstilgang» og aktiver «Tillat brukstilgang»."
+                        ).forEach { (number,instruction)->
+                            Row(Modifier.fillMaxWidth().padding(bottom=11.dp),
+                                verticalAlignment=Alignment.Top){
+                                Box(Modifier.size(24.dp).background(Sage,CircleShape),
+                                    contentAlignment=Alignment.Center){
+                                    Text(number,fontSize=11.sp,fontWeight=FontWeight.SemiBold,color=Forest)
+                                }
+                                Spacer(Modifier.width(11.dp))
+                                Text(instruction,modifier=Modifier.weight(1f),
+                                    color=Ink,fontSize=13.sp,lineHeight=19.sp)
+                            }
+                        }
+                        Text("Viktig: Dette gir tilgang til sensitiv bruksinformasjon. Gjør det bare dersom du kjenner og stoler på appen. Du kan når som helst trekke tillatelsen tilbake.",
+                            fontSize=12.sp,color=Muted,lineHeight=18.sp)
+                        Spacer(Modifier.height(14.dp))
+                        SolidButton("Åpne appinformasjon for NESTE",onClick={
+                            val intent=Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                android.net.Uri.parse("package:"+usageContext.packageName))
+                            usageContext.startActivity(intent)
+                        },modifier=Modifier.fillMaxWidth())
                     }
                 }
                 Spacer(Modifier.height(21.dp))
@@ -782,7 +822,7 @@ private fun formatUsageTime(minutes:Int):String =
                 Text("Finner du ikke NESTE? Søk etter «Brukstilgang» i telefonens Innstillinger. Navnene kan variere mellom telefoner.",
                     color=Muted,fontSize=12.sp,lineHeight=18.sp)
                 Spacer(Modifier.height(12.dp))
-                Text("Denne tillatelsen måler bare bruk. Blokkering av apper i Fokusvern krever en separat, frivillig tillatelse.",
+                Text("Brukstilgang gir innsyn i appbruken, ikke skjerminnhold. Blokkering av apper i Fokusvern krever en separat, frivillig tilgjengelighetstillatelse.",
                     color=Muted,fontSize=12.sp,lineHeight=18.sp)
             } else {
                 val today=snapshot.today?.takeUnless{it.source=="utilgjengelig"}
