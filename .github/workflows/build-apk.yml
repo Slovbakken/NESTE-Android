@@ -17,8 +17,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Installer Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Bruk Android SDK installert på GitHub-runner
+        run: |
+          echo "ANDROID_HOME=${ANDROID_HOME}"
+          command -v sdkmanager
+          sdkmanager --version
       - name: Installer Android platform og build-tools
         run: |
           yes | sdkmanager --licenses >/dev/null || true
