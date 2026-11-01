@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package no.neste.coach
 
 import android.Manifest
@@ -302,7 +304,7 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
         if(result.isNotEmpty()){
             Row(verticalAlignment=Alignment.CenterVertically){Icon(Icons.Default.CheckCircle,null,tint=Forest,modifier=Modifier.size(30.dp));Spacer(Modifier.width(12.dp));Text(when(result){"done"->"Det viktigste er gjort.";"small"->"Et lite steg er gjort.";else->"Du valgte å stå over i dag."},fontSize=24.sp,lineHeight=30.sp,fontWeight=FontWeight.SemiBold)}
             Spacer(Modifier.height(12.dp));Text("Ingen ekstra krav. I morgen starter vi på nytt.",color=Muted,fontSize=15.sp)
-            Spacer(Modifier.height(24.dp));SoftButton("Kort refleksjon") {onSheet(Sheet.REFLECT)}
+            Spacer(Modifier.height(24.dp));SoftButton("Kort refleksjon",onClick={onSheet(Sheet.REFLECT)})
         }else{
             Surface(color=Forest,shape=RoundedCornerShape(26.dp),modifier=Modifier.fillMaxWidth()){
                 Column(Modifier.padding(24.dp)){
@@ -316,7 +318,7 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
                 }
             }
             Spacer(Modifier.height(14.dp))
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){SoftButton("Gjør mindre"){onSheet(Sheet.SMALLER)};SoftButton("Bytt forslag"){onSheet(Sheet.SWITCH)}}
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){SoftButton("Gjør mindre",onClick={onSheet(Sheet.SMALLER)});SoftButton("Bytt forslag",onClick={onSheet(Sheet.SWITCH)})}
             Spacer(Modifier.height(25.dp))
             HorizontalDivider(color=Line)
             Spacer(Modifier.height(16.dp))
@@ -355,7 +357,7 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
         SoftButton("Gjør mindre",onSmaller,Modifier.fillMaxWidth())
         SolidButton("Gjort",onClick={if(store.haptics())haptic.performHapticFeedback(HapticFeedbackType.LongPress);onDone("done")},modifier=Modifier.fillMaxWidth())
         Spacer(Modifier.height(7.dp))
-        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){SoftButton("Delvis gjort"){onDone("small")};SoftButton("Ikke i dag"){onDone("skip")}}
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){SoftButton("Delvis gjort",onClick={onDone("small")});SoftButton("Ikke i dag",onClick={onDone("skip")})}
     }
 }
 
@@ -381,7 +383,7 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
                 HorizontalDivider(color=Line);Spacer(Modifier.height(28.dp))
                 Text(if(selected==0)"Ingen oppgaver med frist i dag." else "Ingenting planlagt her ennå.",fontSize=21.sp,fontWeight=FontWeight.Medium,color=Ink)
                 Spacer(Modifier.height(8.dp));Text("Legg til noe du vil ta ansvar for, når det dukker opp.",color=Muted)
-                Spacer(Modifier.height(18.dp));SoftButton("+ Fang opp"){onSheet(Sheet.CAPTURE)}
+                Spacer(Modifier.height(18.dp));SoftButton("+ Fang opp",onClick={onSheet(Sheet.CAPTURE)})
             }
         }else LazyColumn(contentPadding=PaddingValues(horizontal=24.dp,vertical=8.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
             items(tasks,key={it.optString("id")}){ task->
@@ -436,7 +438,7 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
         Spacer(Modifier.height(9.dp))
         Text(if(done+small==0)"Ingen handlinger registrert ennå. Vi trenger ikke tolke det som manglende fremgang." else "Du har registrert ${done+small} handlinger. Legg merke til hvilke situasjoner som gjorde dem mulige.",fontSize=15.sp,color=Ink,lineHeight=23.sp)
         Spacer(Modifier.height(13.dp))
-        SoftButton("Hva hjalp i dag?"){onSheet(Sheet.REFLECT)}
+        SoftButton("Hva hjalp i dag?",onClick={onSheet(Sheet.REFLECT)})
     }
 }
 @Composable private fun StatTile(label:String,value:String,modifier:Modifier=Modifier){
@@ -457,7 +459,7 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
             HorizontalDivider(color=Line)
         }
         Spacer(Modifier.height(27.dp));MiniLabel("Varsler");Spacer(Modifier.height(8.dp))
-        SoftButton("Endre varsler og tidspunkt"){onSheet(Sheet.NOTIFICATION)}
+        SoftButton("Endre varsler og tidspunkt",onClick={onSheet(Sheet.NOTIFICATION)})
         Spacer(Modifier.height(25.dp));MiniLabel("Tilgjengelighet")
         SettingRow("Redusert bevegelse",store.reducedMotion()){store.setSetting("reducedMotion",it)}
         SettingRow("Haptisk bekreftelse",store.haptics()){store.setSetting("haptics",it)}
@@ -468,7 +470,7 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
         SoftButton("Importer sikkerhetskopi",onImport)
         Text(if(screenTimeMinutes>=0)"Registrert skjermtid i dag: ${screenTimeMinutes} min (Android-estimat)." else "Skjermtid: tilgang ikke gitt",color=Muted,fontSize=12.sp)
         SoftButton("Valgfri skjermtidstilgang",onScreenTime)
-        SoftButton("Slett alle lokale data"){confirmDelete=true}
+        SoftButton("Slett alle lokale data",onClick={confirmDelete=true})
         Spacer(Modifier.height(12.dp));Text("Lagrede læringskort: ${store.cardsCount()} · Historiske innsjekker beholdes i original skala.",fontSize=12.sp,color=Muted)
         Spacer(Modifier.height(26.dp));Text("NESTE 1.1 · Offline personlig coach",fontSize=12.sp,color=Muted)
     }
@@ -555,7 +557,7 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
         }
         if(editing.isNotEmpty()) {
             OutlinedTextField(value=time,onValueChange={time=it.take(5)},label={Text("Tidspunkt HH:MM")},singleLine=true)
-            SoftButton("Lagre tidspunkt"){store.setReminderTime(editing,time);editing=""}
+            SoftButton("Lagre tidspunkt",onClick={store.setReminderTime(editing,time);editing=""})
         }
         SoftButton("Ferdig",onClose,Modifier.fillMaxWidth())
     }
