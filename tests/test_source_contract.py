@@ -7,7 +7,7 @@ ASSETS=ROOT/'android/app/src/main/assets'
 
 class ContractTests(unittest.TestCase):
     def test_action_catalogue_preserved(self):
-        old=(ROOT/'web/app.js').read_text()
+        old=(ASSETS/'app.js').read_text()  # archived V1 app bundled for lossless migration
         actions=json.loads((ASSETS/'actions.json').read_text())
         self.assertEqual(len(actions),29)
         self.assertEqual(len({a['id'] for a in actions}),29)
