@@ -568,11 +568,12 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
     // Bundled string survives rotation/process recreation; the user can change all choices later.
     var selection by rememberSaveable { mutableStateOf("family,work,training") }
     val picked = selection.split(",").filter { it.isNotBlank() }
-    val advance = {
-        if(step<2) step++ else {
+    val advance: () -> Unit = {
+        if(step<2) { step += 1 } else {
             store.setOnboarded(picked.toSet())
             if(store.reminders().optJSONObject("morning")?.optBoolean("on")==true) onNotifications()
         }
+        Unit
     }
     Scaffold(
         modifier=Modifier.fillMaxSize(),
