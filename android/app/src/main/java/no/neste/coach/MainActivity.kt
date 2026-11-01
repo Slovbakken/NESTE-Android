@@ -624,6 +624,152 @@ private enum class Sheet { CAPTURE, CAPACITY, WHY, SMALLER, SWITCH, REFLECT, NOT
         Spacer(Modifier.height(26.dp));Text("NESTE 1.2.1 · Offline personlig coach",fontSize=12.sp,color=Muted)
     }
 }
+private fun formatUsageTime(minutes:Int):String =
+    if(minutes<60) "${minutes} min" else "${minutes/60} t ${(minutes%60).toString().padStart(2,'0')} min"
+
+@Composable private fun ScreenTimeScreen(
+    snapshot:ScreenTimeRepository.Snapshot,
+    store:CoachStore,
+    onBack:()->Unit,
+    onPermission:()->Unit,
+    onRefresh:()->Unit
+) {
+    Column(Modifier.fillMaxSize().background(Paper).statusBarsPadding().navigationBarsPadding()){
+        Row(Modifier.fillMaxWidth().padding(start=12.dp,end=24.dp,top=12.dp),
+            verticalAlignment=Alignment.CenterVertically){
+            IconButton(onClick=onBack){
+                Icon(Icons.AutoMirrored.Filled.ArrowBack,"Tilbake",tint=Forest)
+            }
+            Spacer(Modifier.width(4.dp))
+            Text("Skjermtid",style=MaterialTheme.typography.titleLarge,color=Ink)
+            Spacer(Modifier.weight(1f))
+            if(snapshot.hasAccess){
+                IconButton(onClick=onRefresh){
+                    Icon(Icons.Default.Refresh,"Oppdater skjermtid",tint=Forest)
+                }
+            }
+        }
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(horizontal=24.dp).padding(top=22.dp,bottom=30.dp)){
+            if(!snapshot.hasAccess){
+                Text("Få bedre oversikt, uten mer å følge med på.",
+                    style=MaterialTheme.typography.headlineMedium,color=Ink)
+                Spacer(Modifier.height(13.dp))
+                Text("NESTE kan hente telefonens bruksstatistikk, vise tid per app og hjelpe deg å legge bort mobilen når du selv ønsker det.",
+                    color=Muted,lineHeight=23.sp,fontSize=15.sp)
+                Spacer(Modifier.height(25.dp))
+                Surface(shape=RoundedCornerShape(20.dp),color=White){
+                    Column(Modifier.fillMaxWidth().padding(22.dp)){
+                        Icon(Icons.Default.LockOpen,null,tint=Forest)
+                        Spacer(Modifier.height(16.dp))
+                        Text("Du bestemmer om du vil dele denne tilgangen.",fontWeight=FontWeight.SemiBold,color=Ink)
+                        Spacer(Modifier.height(10.dp))
+                        Text("Åpne Android-innstillingene, finn NESTE under apper med brukstilgang og slå på tilgang. Gå deretter tilbake hit.",
+                            color=Muted,fontSize=14.sp,lineHeight=21.sp)
+                        Spacer(Modifier.height(20.dp))
+                        SolidButton("Åpne tillatelser",onPermission,Modifier.fillMaxWidth())
+                    }
+                }
+                Spacer(Modifier.height(20.dp))
+                Text("Ingen tilgang til meldinger, innholdet i apper eller nettleserhistorikk. Bruksstatistikken behandles bare på telefonen.",
+                    fontSize=12.sp,color=Muted,lineHeight=19.sp)
+            } else {
+                val today=snapshot.today?.takeUnless{it.source=="utilgjengelig"}
+                MiniLabel("I DAG")
+                Spacer(Modifier.height(9.dp))
+                Text(if(today==null)"Ingen måledata" else formatUsageTime(today.minutes),
+                    fontSize=46.sp,lineHeight=53.sp,fontWeight=FontWeight.SemiBold,color=Forest)
+                Spacer(Modifier.height(7.dp))
+                Text(if(today==null)"Android har ikke levert bruksdata for i dag."
+                    else "Android-estimat for tid i apper siden midnatt.",
+                    color=Muted,fontSize=13.sp)
+                Spacer(Modifier.height(27.dp))
+                Surface(shape=RoundedCornerShape(22.dp),color=White){
+                    Column(Modifier.fillMaxWidth().padding(19.dp)){
+                        MiniLabel("SISTE SYV DAGER")
+                        Spacer(Modifier.height(16.dp))
+                        val values=snapshot.days
+                        val maxMinutes=(values.filter{it.source!="utilgjengelig"}
+                            .maxOfOrNull{it.minutes}?:0).coerceAtLeast(1)
+                        Row(Modifier.fillMaxWidth().height(142.dp),
+                            verticalAlignment=Alignment.Bottom,
+                            horizontalArrangement=Arrangement.spacedBy(7.dp)){
+                            values.forEach{ day ->
+                                val available=day.source!="utilgjengelig"
+                                Column(Modifier.weight(1f),
+                                    horizontalAlignment=Alignment.CenterHorizontally,
+                                    verticalArrangement=Arrangement.Bottom){
+                                    Box(Modifier.fillMaxWidth().height(114.dp),contentAlignment=Alignment.BottomCenter){
+                                        Box(
+                                            Modifier.fillMaxWidth(.68f)
+                                                .height(if(available) ((day.minutes.toFloat()/maxMinutes)*108f).coerceAtLeast(5f).dp else 5.dp)
+                                                .background(if(available)Forest else Line,RoundedCornerShape(6.dp))
+                                        )
+                                    }
+                                    Spacer(Modifier.height(9.dp))
+                                    Text(LocalDate.parse(day.day).format(
+                                        DateTimeFormatter.ofPattern("EE",Locale("nb","NO"))).take(2),
+                                        fontSize=11.sp,color=Muted)
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(11.dp))
+                        Text("Stolpene viser registrert tid per dag. Manglende data vises med lav grå stolpe.",
+                            color=Muted,fontSize=11.sp,lineHeight=16.sp)
+                    }
+                }
+                Spacer(Modifier.height(27.dp))
+                MiniLabel("MEST BRUKTE APPER I DAG")
+                Spacer(Modifier.height(12.dp))
+                if(today?.apps.isNullOrEmpty()) {
+                    Text("Ingen appbruk registrert ennå.",color=Muted,fontSize=14.sp)
+                }else{
+                    val maxMs=(today?.apps?.firstOrNull()?.milliseconds?:1L).coerceAtLeast(1L)
+                    today!!.apps.take(8).forEach { app ->
+                        Column(Modifier.fillMaxWidth().padding(vertical=8.dp)){
+                            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+                                Text(app.displayName,modifier=Modifier.weight(1f),
+                                    color=Ink,fontSize=14.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
+                                Text(formatUsageTime(app.minutes),color=Muted,fontSize=12.sp)
+                            }
+                            Spacer(Modifier.height(7.dp))
+                            LinearProgressIndicator(
+                                progress={ (app.milliseconds.toFloat()/maxMs).coerceIn(0f,1f) },
+                                modifier=Modifier.fillMaxWidth().height(5.dp)
+                                    .clip(RoundedCornerShape(3.dp)),
+                                color=Forest,trackColor=Sage
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(26.dp))
+                MiniLabel("DITT EGET UTGANGSPUNKT")
+                Spacer(Modifier.height(7.dp))
+                Text("Vil du ha en mild påminnelse på I dag-skjermen når du har brukt mer enn du selv ønsker?",
+                    fontSize=14.sp,lineHeight=21.sp,color=Muted)
+                Spacer(Modifier.height(13.dp))
+                val current=store.screenTimeGoalMinutes()
+                listOf(listOf(0 to "Ikke noe mål",60 to "1 time",90 to "1,5 timer"),
+                    listOf(120 to "2 timer",180 to "3 timer",240 to "4 timer")).forEach{rowChoices->
+                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                        rowChoices.forEach{(value,label)->
+                            Chip(label,current==value){store.setScreenTimeGoalMinutes(value)}
+                        }
+                    }
+                    Spacer(Modifier.height(9.dp))
+                }
+                Spacer(Modifier.height(17.dp))
+                Text("Målet styrer bare et diskret forslag i NESTE, ikke appblokkering eller systemgrenser. Tallene kan avvike fra Androids Digital balanse.",
+                    color=Muted,fontSize=12.sp,lineHeight=18.sp)
+                Spacer(Modifier.height(10.dp))
+                SoftButton("Åpne tilgangsinnstillinger",onPermission)
+                Text("Måling gjøres lokalt når du åpner appen eller oppdaterer denne skjermen. Ingen bruksstatistikk sendes til en server.",
+                    color=Muted,fontSize=12.sp,lineHeight=18.sp)
+            }
+        }
+    }
+}
+
 @Composable private fun SettingRow(label:String,checked:Boolean,onChange:(Boolean)->Unit){
     Row(Modifier.fillMaxWidth().heightIn(min=54.dp),verticalAlignment=Alignment.CenterVertically){Text(label,Modifier.weight(1f),fontSize=15.sp);Switch(checked=checked,onCheckedChange=onChange,colors=SwitchDefaults.colors(checkedTrackColor=Forest))}
 }
